@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useRouter } from 'next/router'
 
 interface JobSummary {
   title: string
@@ -8,6 +9,7 @@ interface JobSummary {
   location: string
   department: string
   description?: string
+  url?: string
 }
 
 interface ScrapeResult {
@@ -23,6 +25,7 @@ interface ScrapeResult {
 }
 
 export default function Home() {
+  const router = useRouter()
   const [url, setUrl] = useState('https://openai.com/careers/search/')
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<ScrapeResult | null>(null)
@@ -123,16 +126,24 @@ export default function Home() {
               <h2 className="text-xl font-bold mb-4 text-gray-900">💰 薪资最高的职位</h2>
               <div className="space-y-3">
                 {result.summary.highest_paying_jobs.slice(0, 10).map((job, index) => (
-                  <div key={index} className="bg-white p-4 rounded-lg border">
+                  <div key={index} className="bg-white p-4 rounded-lg border hover:shadow-md transition-shadow cursor-pointer"
+                       onClick={() => window.open(job.url, '_blank')}>
                     <div className="flex justify-between items-start">
                       <div className="flex-1">
-                        <h3 className="font-semibold text-lg">{job.title}</h3>
+                        <h3 className="font-semibold text-lg text-blue-600 hover:text-blue-800">{job.title}</h3>
                         <p className="text-gray-600">{job.location} • {job.department}</p>
                         <div className="mt-2">
                           <p className="text-sm font-medium text-gray-700">核心技能:</p>
                           <div className="flex flex-wrap gap-1 mt-1">
                             {job.skills.slice(0, 6).map((skill, i) => (
-                              <span key={i} className="bg-gray-100 px-2 py-1 rounded text-xs">
+                              <span 
+                                key={i} 
+                                className="bg-blue-100 px-2 py-1 rounded text-xs cursor-pointer hover:bg-blue-200 transition-colors"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  router.push(`/skill-jobs?skill=${encodeURIComponent(skill)}`)
+                                }}
+                              >
                                 {skill}
                               </span>
                             ))}
@@ -169,8 +180,12 @@ export default function Home() {
               <h2 className="text-xl font-bold mb-4 text-gray-900">🛠 最常见技能要求</h2>
               <div className="grid grid-cols-3 gap-3">
                 {result.summary.most_common_skills.map((skill, index) => (
-                  <div key={index} className="bg-white p-3 rounded-lg border">
-                    <p className="font-medium">{skill.skill}</p>
+                  <div 
+                    key={index} 
+                    className="bg-white p-3 rounded-lg border cursor-pointer hover:shadow-md hover:bg-blue-50 transition-all"
+                    onClick={() => router.push(`/skill-jobs?skill=${encodeURIComponent(skill.skill)}`)}
+                  >
+                    <p className="font-medium text-blue-600">{skill.skill}</p>
                     <p className="text-sm text-gray-600">{skill.count} 个职位</p>
                   </div>
                 ))}
