@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/router'
 
 interface JobSummary {
@@ -31,12 +31,28 @@ export default function Home() {
   const [result, setResult] = useState<ScrapeResult | null>(null)
   const [error, setError] = useState('')
 
+  // Load saved results on component mount
+  useEffect(() => {
+    const savedResult = localStorage.getItem('openai-jobs-analysis-result')
+    if (savedResult) {
+      try {
+        const parsedResult = JSON.parse(savedResult)
+        setResult(parsedResult)
+      } catch (err) {
+        console.error('Error loading saved results:', err)
+        localStorage.removeItem('openai-jobs-analysis-result')
+      }
+    }
+  }, [])
+
   const scrapeJobs = async () => {
     if (!url) return
 
     setLoading(true)
     setError('')
     setResult(null)
+    // Clear saved results when starting new analysis
+    localStorage.removeItem('openai-jobs-analysis-result')
 
     try {
       const res = await fetch('/api/scrape-with-puppeteer', {
@@ -53,11 +69,19 @@ export default function Home() {
 
       const data = await res.json()
       setResult(data)
+      // Save results to localStorage for persistence
+      localStorage.setItem('openai-jobs-analysis-result', JSON.stringify(data))
     } catch (err) {
       setError(err instanceof Error ? err.message : '爬取失败，请重试')
     } finally {
       setLoading(false)
     }
+  }
+
+  const clearResults = () => {
+    setResult(null)
+    setError('')
+    localStorage.removeItem('openai-jobs-analysis-result')
   }
 
   return (
@@ -79,13 +103,23 @@ export default function Home() {
             onChange={(e) => setUrl(e.target.value)}
           />
 
-          <button
-            onClick={scrapeJobs}
-            disabled={loading || !url}
-            className="w-full bg-blue-500 text-white p-3 rounded-lg hover:bg-blue-600 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
-          >
-            {loading ? '分析中...' : '快速分析职位'}
-          </button>
+          <div className="flex space-x-3">
+            <button
+              onClick={scrapeJobs}
+              disabled={loading || !url}
+              className="flex-1 bg-blue-500 text-white p-3 rounded-lg hover:bg-blue-600 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+            >
+              {loading ? '分析中...' : '快速分析职位'}
+            </button>
+            {result && (
+              <button
+                onClick={clearResults}
+                className="bg-gray-500 text-white px-4 py-3 rounded-lg hover:bg-gray-600 transition-colors"
+              >
+                清除结果
+              </button>
+            )}
+          </div>
         </div>
 
         {error && (

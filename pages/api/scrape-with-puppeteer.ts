@@ -304,31 +304,48 @@ export default async function handler(
           if (requirementsText.includes('mongodb') || requirementsText.includes('mongo')) skills.push('MongoDB')
           if (requirementsText.includes('sql') && !requirementsText.includes('mysql') && !requirementsText.includes('postgresql')) skills.push('SQL')
           
-          // Data Center & Infrastructure Skills
-          if (requirementsText.includes('mep') || requirementsText.includes('mechanical, electrical, plumbing')) skills.push('MEP Systems')
-          if (requirementsText.includes('data center') || requirementsText.includes('datacenter')) skills.push('Data Center Design')
-          if (requirementsText.includes('power') || requirementsText.includes('electrical')) skills.push('Power Systems')
-          if (requirementsText.includes('cooling') || requirementsText.includes('hvac')) skills.push('Cooling Systems')
-          if (requirementsText.includes('ups') || requirementsText.includes('uninterruptible power')) skills.push('UPS Systems')
-          if (requirementsText.includes('generator') || requirementsText.includes('backup power')) skills.push('Backup Power')
-          if (requirementsText.includes('chiller') || requirementsText.includes('cdu')) skills.push('Cooling Equipment')
-          if (requirementsText.includes('critical infrastructure') || requirementsText.includes('mission critical')) skills.push('Critical Infrastructure')
-          if (requirementsText.includes('vendor management') || requirementsText.includes('contractor')) skills.push('Vendor Management')
-          if (requirementsText.includes('project management') || requirementsText.includes('project lead')) skills.push('Project Management')
-          if (requirementsText.includes('commissioning') || requirementsText.includes('testing')) skills.push('Commissioning')
-          if (requirementsText.includes('compliance') || requirementsText.includes('regulatory')) skills.push('Regulatory Compliance')
-          if (requirementsText.includes('construction') || requirementsText.includes('building')) skills.push('Construction Management')
-          if (requirementsText.includes('cad') || requirementsText.includes('autocad')) skills.push('CAD/Design Software')
-          if (requirementsText.includes('leadership') || requirementsText.includes('leading teams')) skills.push('Leadership')
-          if (requirementsText.includes('operations') || requirementsText.includes('operational')) skills.push('Operations Management')
-          if (requirementsText.includes('professional engineer') || requirementsText.includes('pe license')) skills.push('Professional Engineering License')
+          // Data Center & Infrastructure Skills (only for infrastructure roles)
+          const isInfrastructureRole = jobLink.title.toLowerCase().includes('data center') || 
+                                      jobLink.title.toLowerCase().includes('stargate') ||
+                                      jobLink.title.toLowerCase().includes('infrastructure') ||
+                                      requirementsText.includes('data center design') ||
+                                      requirementsText.includes('facility') && requirementsText.includes('engineering')
           
-          // Business Skills (for non-tech roles)
-          if (requirementsText.includes('sales') || requirementsText.includes('selling')) skills.push('Sales')
-          if (requirementsText.includes('business development') || requirementsText.includes('bd ')) skills.push('Business Development')
-          if (requirementsText.includes('customer success') || requirementsText.includes('account management')) skills.push('Customer Success')
-          if (requirementsText.includes('marketing') && !requirementsText.includes('data')) skills.push('Marketing')
-          if (requirementsText.includes('finance') || requirementsText.includes('accounting')) skills.push('Finance')
+          if (isInfrastructureRole) {
+            if (requirementsText.includes('mep') || requirementsText.includes('mechanical, electrical, plumbing')) skills.push('MEP Systems')
+            if (requirementsText.includes('data center') || requirementsText.includes('datacenter')) skills.push('Data Center Design')
+            if (requirementsText.includes('power systems') || requirementsText.includes('electrical systems')) skills.push('Power Systems')
+            if (requirementsText.includes('cooling') || requirementsText.includes('hvac')) skills.push('Cooling Systems')
+            if (requirementsText.includes('ups') || requirementsText.includes('uninterruptible power')) skills.push('UPS Systems')
+            if (requirementsText.includes('generator') || requirementsText.includes('backup power')) skills.push('Backup Power')
+            if (requirementsText.includes('chiller') || requirementsText.includes('cdu')) skills.push('Cooling Equipment')
+            if (requirementsText.includes('critical infrastructure') || requirementsText.includes('mission critical')) skills.push('Critical Infrastructure')
+            if (requirementsText.includes('vendor management') || requirementsText.includes('contractor management')) skills.push('Vendor Management')
+            if (requirementsText.includes('commissioning') && requirementsText.includes('testing')) skills.push('Commissioning')
+            if (requirementsText.includes('regulatory compliance') || requirementsText.includes('building codes')) skills.push('Regulatory Compliance')
+            if (requirementsText.includes('construction management') || (requirementsText.includes('construction') && requirementsText.includes('experience'))) skills.push('Construction Management')
+            if (requirementsText.includes('cad') || requirementsText.includes('autocad')) skills.push('CAD/Design Software')
+            if (requirementsText.includes('professional engineer') || requirementsText.includes('pe license')) skills.push('Professional Engineering License')
+          }
+          
+          // General management skills (only when explicitly mentioned as requirements)
+          if (requirementsText.includes('project management') || requirementsText.includes('pmp certification')) skills.push('Project Management')
+          if (requirementsText.includes('team leadership') || requirementsText.includes('leading teams') || requirementsText.includes('management experience')) skills.push('Leadership')
+          if (requirementsText.includes('operations management') || requirementsText.includes('operational excellence')) skills.push('Operations Management')
+          
+          // Business Skills (only for business roles, and with stricter matching)
+          const isBusinessRole = jobLink.title.toLowerCase().includes('sales') || 
+                                jobLink.title.toLowerCase().includes('business') ||
+                                jobLink.title.toLowerCase().includes('customer') ||
+                                jobLink.title.toLowerCase().includes('account')
+          
+          if (isBusinessRole) {
+            if (requirementsText.includes('sales experience') || requirementsText.includes('selling experience')) skills.push('Sales')
+            if (requirementsText.includes('business development') || requirementsText.includes('bd experience')) skills.push('Business Development')
+            if (requirementsText.includes('customer success') || requirementsText.includes('account management')) skills.push('Customer Success')
+            if (requirementsText.includes('marketing experience') && !requirementsText.includes('data')) skills.push('Marketing')
+            if (requirementsText.includes('finance') || requirementsText.includes('accounting')) skills.push('Finance')
+          }
           
           // Other Technical Skills  
           if (requirementsText.includes('git') && !requirementsText.includes('digit')) skills.push('Git')
