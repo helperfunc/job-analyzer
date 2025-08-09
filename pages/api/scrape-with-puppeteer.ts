@@ -307,143 +307,174 @@ export default async function handler(
             console.log(`   Job description length: ${jobDescription.length}`)
           }
           
-          // Only extract skills that are actually mentioned in requirements
-          // Determine if this is a frontend role first (needed for skill detection)
-          const isFrontendRole = jobLink.title.toLowerCase().includes('frontend') || 
-                                 jobLink.title.toLowerCase().includes('front-end') ||
-                                 jobLink.title.toLowerCase().includes('ui') ||
-                                 jobLink.title.toLowerCase().includes('web developer') ||
-                                 jobLink.title.toLowerCase().includes('full stack') ||
-                                 jobLink.title.toLowerCase().includes('fullstack') ||
-                                 requirementsText.includes('frontend developer') ||
-                                 requirementsText.includes('web application')
+          // CONSERVATIVE skill extraction based on job TITLE only (since individual pages are blocked by Cloudflare)
+          // This prevents false positives from parsing Cloudflare challenge pages
+          const titleLower = jobLink.title.toLowerCase()
           
-          // Programming Languages (only when explicitly mentioned as requirements)
-          if (requirementsText.includes('python') && !requirementsText.includes('monty python')) skills.push('Python')
-          
-          const hasJavaScript = isFrontendRole && (requirementsText.includes('javascript') || requirementsText.includes(' js ')) && 
-                                (requirementsText.includes('frontend') || requirementsText.includes('web') || requirementsText.includes('browser') || requirementsText.includes('node'))
-          if (hasJavaScript) skills.push('JavaScript')
-          
-          if (requirementsText.includes('typescript') || requirementsText.includes(' ts ')) skills.push('TypeScript')
-          if (requirementsText.includes('c++') || requirementsText.includes('cpp') || requirementsText.includes('c plus')) skills.push('C++')
-          if (requirementsText.includes('go ') || requirementsText.includes('golang') || requirementsText.includes('go programming')) skills.push('Go')
-          if (requirementsText.includes('rust') && !requirementsText.includes('trust')) skills.push('Rust')
-          if (requirementsText.includes('java ') && !requirementsText.includes('javascript')) skills.push('Java')
-          if (requirementsText.includes('swift') && (requirementsText.includes('ios') || requirementsText.includes('mobile'))) skills.push('Swift')
-          
-          // AI/ML Technologies (only when specifically mentioned as requirements)
-          if (requirementsText.includes('pytorch') || requirementsText.includes('torch')) skills.push('PyTorch')
-          if (requirementsText.includes('tensorflow') || requirementsText.includes(' tf ')) skills.push('TensorFlow')
-          
-          const hasMLSkills = (requirementsText.includes('machine learning') || requirementsText.includes(' ml ') || requirementsText.includes('artificial intelligence')) &&
-                              (requirementsText.includes('experience') || requirementsText.includes('background') || requirementsText.includes('knowledge'))
-          if (hasMLSkills) skills.push('Machine Learning')
-          
-          if (requirementsText.includes('deep learning') || requirementsText.includes('neural network')) skills.push('Deep Learning')
-          if (requirementsText.includes('cuda') || requirementsText.includes('gpu programming')) skills.push('CUDA')
-          if (requirementsText.includes('transformers') || requirementsText.includes('llm') || requirementsText.includes('large language model')) skills.push('LLM/Transformers')
-          
-          // Infrastructure & DevOps (only when explicitly mentioned as requirements)
-          if (requirementsText.includes('kubernetes') || requirementsText.includes('k8s')) skills.push('Kubernetes')
-          if (requirementsText.includes('docker') || requirementsText.includes('containerization')) skills.push('Docker')
-          
-          const hasAWS = requirementsText.includes('aws') || requirementsText.includes('amazon web services')
-          if (hasAWS && (requirementsText.includes('cloud') || requirementsText.includes('infrastructure') || requirementsText.includes('deployment'))) skills.push('AWS')
-          
-          const hasGCP = requirementsText.includes('gcp') || requirementsText.includes('google cloud')
-          if (hasGCP && (requirementsText.includes('cloud') || requirementsText.includes('infrastructure') || requirementsText.includes('deployment'))) skills.push('Google Cloud')
-          
-          const hasAzure = requirementsText.includes('azure') || requirementsText.includes('microsoft cloud')  
-          if (hasAzure && (requirementsText.includes('cloud') || requirementsText.includes('infrastructure') || requirementsText.includes('deployment'))) skills.push('Azure')
-          
-          if (requirementsText.includes('distributed systems')) skills.push('Distributed Systems')
-          if (requirementsText.includes('microservices') || requirementsText.includes('micro-services')) skills.push('Microservices')
-          
-          // Frontend Technologies (VERY strict matching - only for clearly frontend roles)
-          
-          const hasReactFramework = isFrontendRole && (requirementsText.includes('react.js') || 
-                                    requirementsText.includes('react js') ||
-                                    requirementsText.includes('reactjs') ||
-                                    requirementsText.includes('react framework') ||
-                                    requirementsText.includes('react library')) &&
-                                   !requirementsText.includes('reactive') &&
-                                   !requirementsText.includes('reaction') &&
-                                   !requirementsText.includes('react to') &&
-                                   !requirementsText.includes('react quickly')
-          
-          if (hasReactFramework) skills.push('React')
-          if (requirementsText.includes('vue') || requirementsText.includes('vue.js')) skills.push('Vue.js')
-          
-          const hasAngularFramework = requirementsText.includes('angular') && 
-                                     !requirementsText.includes('rectangular') && 
-                                     (requirementsText.includes('framework') || requirementsText.includes('typescript') || requirementsText.includes('frontend'))
-          if (hasAngularFramework) skills.push('Angular')
-          
-          const hasHTMLCSS = isFrontendRole && (requirementsText.includes('html') || requirementsText.includes('css')) && 
-                             (requirementsText.includes('frontend') || requirementsText.includes('web') || requirementsText.includes('ui') || requirementsText.includes('website'))
-          if (hasHTMLCSS) skills.push('HTML/CSS')
-          
-          // Databases
-          if (requirementsText.includes('postgresql') || requirementsText.includes('postgres')) skills.push('PostgreSQL')
-          if (requirementsText.includes('mysql') || requirementsText.includes('my sql')) skills.push('MySQL')
-          if (requirementsText.includes('redis') && !requirementsText.includes('credis')) skills.push('Redis')
-          if (requirementsText.includes('mongodb') || requirementsText.includes('mongo')) skills.push('MongoDB')
-          if (requirementsText.includes('sql') && !requirementsText.includes('mysql') && !requirementsText.includes('postgresql')) skills.push('SQL')
-          
-          // Data Center & Infrastructure Skills (only for infrastructure roles)
-          const isInfrastructureRole = jobLink.title.toLowerCase().includes('data center') || 
-                                      jobLink.title.toLowerCase().includes('stargate') ||
-                                      jobLink.title.toLowerCase().includes('infrastructure') ||
-                                      requirementsText.includes('data center design') ||
-                                      requirementsText.includes('facility') && requirementsText.includes('engineering')
-          
-          if (isInfrastructureRole) {
-            if (requirementsText.includes('mep') || requirementsText.includes('mechanical, electrical, plumbing')) skills.push('MEP Systems')
-            if (requirementsText.includes('data center') || requirementsText.includes('datacenter')) skills.push('Data Center Design')
-            if (requirementsText.includes('power systems') || requirementsText.includes('electrical systems')) skills.push('Power Systems')
-            if (requirementsText.includes('cooling') || requirementsText.includes('hvac')) skills.push('Cooling Systems')
-            if (requirementsText.includes('ups') || requirementsText.includes('uninterruptible power')) skills.push('UPS Systems')
-            if (requirementsText.includes('generator') || requirementsText.includes('backup power')) skills.push('Backup Power')
-            if (requirementsText.includes('chiller') || requirementsText.includes('cdu')) skills.push('Cooling Equipment')
-            if (requirementsText.includes('critical infrastructure') || requirementsText.includes('mission critical')) skills.push('Critical Infrastructure')
-            if (requirementsText.includes('vendor management') || requirementsText.includes('contractor management')) skills.push('Vendor Management')
-            if (requirementsText.includes('commissioning') && requirementsText.includes('testing')) skills.push('Commissioning')
-            if (requirementsText.includes('regulatory compliance') || requirementsText.includes('building codes')) skills.push('Regulatory Compliance')
-            if (requirementsText.includes('construction management') || (requirementsText.includes('construction') && requirementsText.includes('experience'))) skills.push('Construction Management')
-            if (requirementsText.includes('cad') || requirementsText.includes('autocad')) skills.push('CAD/Design Software')
-            if (requirementsText.includes('professional engineer') || requirementsText.includes('pe license')) skills.push('Professional Engineering License')
+          // Core technical skills based on job title patterns
+          // Machine Learning (very conservative)
+          if (titleLower.includes('machine learning') || 
+              titleLower.includes('ml engineer') ||
+              (titleLower.includes('research') && (titleLower.includes('ai') || titleLower.includes('intelligence'))) ||
+              titleLower.includes('deep learning') ||
+              titleLower.includes('inference')) {
+            skills.push('Machine Learning')
           }
           
-          // General management skills (only when explicitly mentioned as requirements)
-          if (requirementsText.includes('project management') || requirementsText.includes('pmp certification')) skills.push('Project Management')
-          if (requirementsText.includes('team leadership') || requirementsText.includes('leading teams') || requirementsText.includes('management experience')) skills.push('Leadership')
-          if (requirementsText.includes('operations management') || requirementsText.includes('operational excellence')) skills.push('Operations Management')
-          
-          // Business Skills (only for business roles, and with stricter matching)
-          const isBusinessRole = jobLink.title.toLowerCase().includes('sales') || 
-                                jobLink.title.toLowerCase().includes('business') ||
-                                jobLink.title.toLowerCase().includes('customer') ||
-                                jobLink.title.toLowerCase().includes('account')
-          
-          if (isBusinessRole) {
-            if (requirementsText.includes('sales experience') || requirementsText.includes('selling experience')) skills.push('Sales')
-            if (requirementsText.includes('business development') || requirementsText.includes('bd experience')) skills.push('Business Development')
-            if (requirementsText.includes('customer success') || requirementsText.includes('account management')) skills.push('Customer Success')
-            if (requirementsText.includes('marketing experience') && !requirementsText.includes('data')) skills.push('Marketing')
-            if (requirementsText.includes('finance') || requirementsText.includes('accounting')) skills.push('Finance')
+          // AI/ML specific frameworks (only for clearly ML roles)  
+          if ((titleLower.includes('machine learning') || titleLower.includes('research') || titleLower.includes('inference')) &&
+              (titleLower.includes('pytorch') || titleLower.includes('torch') || titleLower.includes('ml') || titleLower.includes('ai'))) {
+            skills.push('PyTorch')
           }
           
-          // Other Technical Skills  
-          const hasGit = requirementsText.includes('git') && 
-                         !requirementsText.includes('digit') && 
-                         !requirementsText.includes('digital') &&
-                         (requirementsText.includes('version control') || requirementsText.includes('repository') || requirementsText.includes('github') || requirementsText.includes('gitlab'))
-          if (hasGit) skills.push('Git')
+          // Programming languages (conservative, role-specific)
+          if (titleLower.includes('python') || 
+              titleLower.includes('research') || 
+              titleLower.includes('machine learning') ||
+              titleLower.includes('data') ||
+              titleLower.includes('infrastructure') ||
+              titleLower.includes('backend') ||
+              titleLower.includes('software engineer')) {
+            skills.push('Python')
+          }
           
-          if (requirementsText.includes('linux') || requirementsText.includes('unix')) skills.push('Linux/Unix')
-          if (requirementsText.includes('rest api') || requirementsText.includes('restful')) skills.push('REST APIs')
-          if (requirementsText.includes('graphql') || requirementsText.includes('graph ql')) skills.push('GraphQL')
+          if (titleLower.includes('c++') || 
+              titleLower.includes('systems') ||
+              titleLower.includes('inference') ||
+              titleLower.includes('gpu') ||
+              titleLower.includes('cuda')) {
+            skills.push('C++')
+          }
+          
+          if (titleLower.includes('cuda') || titleLower.includes('gpu')) {
+            skills.push('CUDA')
+          }
+          
+          if (titleLower.includes('go ') || titleLower.includes('golang') ||
+              (titleLower.includes('infrastructure') && titleLower.includes('software'))) {
+            skills.push('Go')
+          }
+          
+          // LLM/Transformers (for research and inference roles)
+          if (titleLower.includes('llm') || 
+              titleLower.includes('transformer') ||
+              titleLower.includes('language model') ||
+              (titleLower.includes('research') && titleLower.includes('ai')) ||
+              titleLower.includes('inference')) {
+            skills.push('LLM/Transformers')
+          }
+          
+          // Infrastructure & DevOps (title-based)
+          if (titleLower.includes('infrastructure') || 
+              titleLower.includes('devops') ||
+              titleLower.includes('platform') ||
+              titleLower.includes('scaling') ||
+              titleLower.includes('gpu')) {
+            if (titleLower.includes('kubernetes') || titleLower.includes('k8s')) {
+              skills.push('Kubernetes')
+            }
+            if (titleLower.includes('docker')) {
+              skills.push('Docker')
+            }
+            if (titleLower.includes('google cloud') || titleLower.includes('gcp')) {
+              skills.push('Google Cloud')
+            }
+            if (titleLower.includes('aws')) {
+              skills.push('AWS')
+            }
+            if (titleLower.includes('azure')) {
+              skills.push('Azure')
+            }
+            if (titleLower.includes('linux') || titleLower.includes('unix')) {
+              skills.push('Linux/Unix')
+            }
+          }
+          
+          // Distributed systems (for scaling and infrastructure roles)
+          if (titleLower.includes('distributed') || 
+              titleLower.includes('scaling') ||
+              titleLower.includes('infrastructure') ||
+              titleLower.includes('platform')) {
+            skills.push('Distributed Systems')
+          }
+          
+          // Frontend (very strict)
+          if (titleLower.includes('frontend') || 
+              titleLower.includes('front-end') ||
+              titleLower.includes('ui engineer') ||
+              titleLower.includes('web developer')) {
+            skills.push('JavaScript')
+            if (titleLower.includes('react')) {
+              skills.push('React')
+            }
+            skills.push('HTML/CSS')
+          }
+          
+          // Data Center & Infrastructure (title-based)
+          if (titleLower.includes('data center') || 
+              titleLower.includes('datacenter') ||
+              titleLower.includes('stargate') ||
+              titleLower.includes('electrical') ||
+              titleLower.includes('mechanical') ||
+              titleLower.includes('civil')) {
+            skills.push('Data Center Design')
+            if (titleLower.includes('electrical') || titleLower.includes('power')) {
+              skills.push('Power Systems')
+            }
+            if (titleLower.includes('mechanical') || titleLower.includes('mep')) {
+              skills.push('MEP Systems')
+            }
+            if (titleLower.includes('ups') || titleLower.includes('power')) {
+              skills.push('UPS Systems')
+            }
+            if (titleLower.includes('cooling') || titleLower.includes('thermal')) {
+              skills.push('Cooling Systems')
+            }
+            if (titleLower.includes('critical') || titleLower.includes('infrastructure')) {
+              skills.push('Critical Infrastructure')
+            }
+          }
+          
+          // Product & Design
+          if (titleLower.includes('design') && !titleLower.includes('software')) {
+            if (titleLower.includes('cad') || titleLower.includes('mechanical') || titleLower.includes('manufacturing')) {
+              skills.push('CAD/Design Software')
+            }
+          }
+          
+          // Management roles
+          if (titleLower.includes('manager') || 
+              titleLower.includes('director') ||
+              titleLower.includes('lead') ||
+              titleLower.includes('senior') ||
+              titleLower.includes('principal')) {
+            skills.push('Leadership')
+            if (titleLower.includes('project') || titleLower.includes('program')) {
+              skills.push('Project Management')
+            }
+          }
+          
+          // Business roles
+          if (titleLower.includes('sales') || 
+              titleLower.includes('business') ||
+              titleLower.includes('account')) {
+            skills.push('Sales')
+            if (titleLower.includes('customer') || titleLower.includes('success')) {
+              skills.push('Customer Success')
+            }
+          }
+          
+          // SQL for data roles
+          if (titleLower.includes('data') || 
+              titleLower.includes('analytics') ||
+              titleLower.includes('database')) {
+            skills.push('SQL')
+          }
+          
+          // Finance
+          if (titleLower.includes('finance') || titleLower.includes('accounting')) {
+            skills.push('Finance')
+          }
           
           // Remove duplicates
           const uniqueSkills = [...new Set(skills)]
@@ -625,12 +656,42 @@ export default async function handler(
     
     fs.writeFileSync(filepath, JSON.stringify(saveData, null, 2))
     
-    // Create summary
-    const highestPaying = jobs.filter(j => j.salary_min).slice(0, 10)
+    console.log(`💾 Saved new data to: ${filename}`)
+    
+    // After saving, use the SAME logic as get-summary to determine which file to actually use
+    // This ensures consistency between scraping results and refresh results
+    const files = fs.readdirSync(dataDir).filter(f => f.startsWith('openai-jobs-') && f.endsWith('.json'))
+    
+    let actualDataFile
+    const refinedFiles = files.filter(f => f.includes('REFINED')).sort()
+    const fixedFiles = files.filter(f => f.includes('FIXED')).sort()
+    
+    if (refinedFiles.length > 0) {
+      actualDataFile = refinedFiles[refinedFiles.length - 1] // Latest REFINED file
+      console.log(`📊 Using REFINED data file for summary: ${actualDataFile}`)
+    } else if (fixedFiles.length > 0) {
+      actualDataFile = fixedFiles[fixedFiles.length - 1] // Latest FIXED file
+      console.log(`📊 Using FIXED data file for summary: ${actualDataFile}`)
+    } else {
+      actualDataFile = filename // Use the newly created file
+      console.log(`📊 Using newly created data file for summary: ${actualDataFile}`)
+    }
+    
+    // Read the actual data file that will be used (might be different from what we just created)
+    const actualFilePath = path.join(dataDir, actualDataFile)
+    const actualData = JSON.parse(fs.readFileSync(actualFilePath, 'utf8'))
+    
+    // Create summary from the ACTUAL data that will be displayed
+    const actualJobs = actualData.jobs || []
+    const highestPaying = actualJobs
+      .filter((j: Job) => j.salary_min)
+      .sort((a: Job, b: Job) => (b.salary_max || 0) - (a.salary_max || 0))
+      .slice(0, 10)
+      
     const skillsCount: Record<string, number> = {}
     
-    // Properly count skills from actual jobs
-    jobs.forEach(job => {
+    // Count skills from ACTUAL jobs data
+    actualJobs.forEach((job: Job) => {
       if (job.skills && job.skills.length > 0) {
         job.skills.forEach(skill => {
           skillsCount[skill] = (skillsCount[skill] || 0) + 1
@@ -638,20 +699,25 @@ export default async function handler(
       }
     })
     
-    console.log(`📊 Skills found: ${Object.keys(skillsCount).length} different skills`)
+    console.log(`📊 Skills found in ${actualDataFile}: ${Object.keys(skillsCount).length} different skills`)
     
     const topSkills = Object.entries(skillsCount)
       .sort(([,a], [,b]) => b - a)
       .slice(0, 15)
       .map(([skill, count]) => ({ skill, count }))
     
+    // Log the ML count for debugging
+    const mlSkill = topSkills.find(s => s.skill === 'Machine Learning')
+    console.log(`🔍 Machine Learning count: ${mlSkill?.count || 0}`)
+    
     res.status(200).json({
       success: true,
       message: `Successfully scraped ${jobs.length} jobs from OpenAI careers`,
       filepath,
+      dataSource: actualDataFile, // Show which file was actually used for the summary
       summary: {
-        total_jobs: jobs.length,
-        jobs_with_salary: jobs.filter(j => j.salary).length,
+        total_jobs: actualJobs.length,
+        jobs_with_salary: actualJobs.filter((j: Job) => j.salary_min || j.salary_max).length,
         highest_paying_jobs: highestPaying,
         most_common_skills: topSkills
       }

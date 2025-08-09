@@ -28,48 +28,59 @@ export default function Home() {
   const router = useRouter()
   const [url, setUrl] = useState('https://openai.com/careers/search/')
   const [loading, setLoading] = useState(false)
+  const [initialLoading, setInitialLoading] = useState(true) // New state for initial load
   const [result, setResult] = useState<ScrapeResult | null>(null)
   const [error, setError] = useState('')
+  const [mounted, setMounted] = useState(false) // Track if component is mounted
 
-  // Load latest results on component mount
+  // Track mounting to avoid SSR issues
   useEffect(() => {
-    // Always load fresh data on mount instead of using potentially outdated cache
+    setMounted(true)
+  }, [])
+
+  // Load latest results after component is mounted
+  useEffect(() => {
+    if (!mounted) return
+    
+    // Clear any old cached data first
+    localStorage.removeItem('openai-jobs-analysis-result')
+    
+    // Always load fresh data on mount
     const loadLatestData = async () => {
+      setInitialLoading(true)
+      setResult(null) // Ensure no old data is shown
+      
       try {
-        const res = await fetch('/api/get-summary', {
+        const res = await fetch(`/api/get-summary?_t=${Date.now()}`, {
           method: 'GET',
+          cache: 'no-cache', // Prevent browser caching
+          headers: {
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
+            'Pragma': 'no-cache',
+            'Expires': '0'
+          }
         })
         
         if (res.ok) {
           const data = await res.json()
+          console.log('🔍 Fresh API response - ML jobs:', data.summary?.most_common_skills?.find(s => s.skill === 'Machine Learning')?.count)
+          console.log('🔍 Data source file:', data.dataSource)
+          console.log('🔍 Timestamp:', data.timestamp)
           setResult(data)
           // Update localStorage with fresh data
           localStorage.setItem('openai-jobs-analysis-result', JSON.stringify(data))
         } else {
-          // If API fails, try localStorage as fallback
-          const savedResult = localStorage.getItem('openai-jobs-analysis-result')
-          if (savedResult) {
-            const parsedResult = JSON.parse(savedResult)
-            setResult(parsedResult)
-          }
+          console.error('Failed to load summary:', res.status)
         }
       } catch (err) {
         console.error('Error loading data:', err)
-        // Try localStorage as fallback
-        const savedResult = localStorage.getItem('openai-jobs-analysis-result')
-        if (savedResult) {
-          try {
-            const parsedResult = JSON.parse(savedResult)
-            setResult(parsedResult)
-          } catch (e) {
-            localStorage.removeItem('openai-jobs-analysis-result')
-          }
-        }
+      } finally {
+        setInitialLoading(false)
       }
     }
     
     loadLatestData()
-  }, [])
+  }, [mounted])
 
   const scrapeJobs = async () => {
     if (!url) return
@@ -178,7 +189,11 @@ export default function Home() {
           </div>
         )}
 
-        {result && (
+        {initialLoading ? (
+          <div className="flex items-center justify-center py-20">
+            <div className="text-xl text-gray-600">加载中...</div>
+          </div>
+        ) : result ? (
           <div className="space-y-6">
             {/* Success message */}
             <div className="bg-green-50 p-4 rounded-lg border border-green-200">
@@ -276,7 +291,7 @@ export default function Home() {
               </div>
             </div>
           </div>
-        )}
+        ) : null}
 
         <div className="mt-12 text-center text-sm text-gray-500">
           <p>爬取的数据会保存在项目的 data/ 目录下</p>
