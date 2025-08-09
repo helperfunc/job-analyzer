@@ -31,18 +31,44 @@ export default function Home() {
   const [result, setResult] = useState<ScrapeResult | null>(null)
   const [error, setError] = useState('')
 
-  // Load saved results on component mount
+  // Load latest results on component mount
   useEffect(() => {
-    const savedResult = localStorage.getItem('openai-jobs-analysis-result')
-    if (savedResult) {
+    // Always load fresh data on mount instead of using potentially outdated cache
+    const loadLatestData = async () => {
       try {
-        const parsedResult = JSON.parse(savedResult)
-        setResult(parsedResult)
+        const res = await fetch('/api/get-summary', {
+          method: 'GET',
+        })
+        
+        if (res.ok) {
+          const data = await res.json()
+          setResult(data)
+          // Update localStorage with fresh data
+          localStorage.setItem('openai-jobs-analysis-result', JSON.stringify(data))
+        } else {
+          // If API fails, try localStorage as fallback
+          const savedResult = localStorage.getItem('openai-jobs-analysis-result')
+          if (savedResult) {
+            const parsedResult = JSON.parse(savedResult)
+            setResult(parsedResult)
+          }
+        }
       } catch (err) {
-        console.error('Error loading saved results:', err)
-        localStorage.removeItem('openai-jobs-analysis-result')
+        console.error('Error loading data:', err)
+        // Try localStorage as fallback
+        const savedResult = localStorage.getItem('openai-jobs-analysis-result')
+        if (savedResult) {
+          try {
+            const parsedResult = JSON.parse(savedResult)
+            setResult(parsedResult)
+          } catch (e) {
+            localStorage.removeItem('openai-jobs-analysis-result')
+          }
+        }
       }
     }
+    
+    loadLatestData()
   }, [])
 
   const scrapeJobs = async () => {
@@ -134,13 +160,6 @@ export default function Home() {
               className="flex-1 bg-blue-500 text-white p-3 rounded-lg hover:bg-blue-600 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
             >
               {loading ? '分析中...' : '快速分析职位'}
-            </button>
-            <button
-              onClick={refreshStats}
-              disabled={loading}
-              className="bg-green-500 text-white px-4 py-3 rounded-lg hover:bg-green-600 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
-            >
-              {loading ? '刷新中...' : '刷新统计'}
             </button>
             {result && (
               <button
