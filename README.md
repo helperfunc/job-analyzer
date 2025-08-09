@@ -1,4 +1,5 @@
 # AI 职位分析器 MVP
+<img width="1900" height="3590" alt="localhost" src="https://github.com/user-attachments/assets/f58cf97b-0629-4410-9666-b7a350325382" />
 
 一个简单的职位分析工具，帮你快速了解职位的薪资范围和技能要求。
 
