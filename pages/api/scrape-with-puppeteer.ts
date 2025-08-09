@@ -241,32 +241,90 @@ export default async function handler(
           const $job = cheerio.load(jobHtml)
           const skills: string[] = []
           
-          // Find requirements/qualifications sections specifically
+          // Extract job description first
+          let jobDescription = ''
+          const jobContentSelectors = [
+            'div[data-testid="job-description"]',
+            '.job-description',
+            '[class*="description"]',
+            '[class*="content"]',
+            'main',
+            'article'
+          ]
+          
+          for (const selector of jobContentSelectors) {
+            const content = $job(selector).text()
+            if (content && content.length > 200) {
+              jobDescription = content
+              break
+            }
+          }
+          
+          // If no specific content found, get text from common job posting containers
+          if (!jobDescription) {
+            jobDescription = $job('body').text()
+          }
+          
+          // Find requirements/qualifications sections specifically from the job description
           let requirementsText = ''
-          const requirementsSections = $job('*').filter((i, elem) => {
-            const text = $job(elem).text().toLowerCase()
-            return (text.includes('requirements') || 
-                   text.includes('qualifications') || 
-                   text.includes('skills') ||
-                   text.includes('what you') ||
-                   text.includes('you have') ||
-                   text.includes('minimum qualifications')) &&
-                   text.length > 50 && text.length < 2000
+          const lowerDesc = jobDescription.toLowerCase()
+          
+          // Split into paragraphs and find requirements-related sections
+          const paragraphs = jobDescription.split('\n').filter(p => p.trim().length > 20)
+          
+          paragraphs.forEach(paragraph => {
+            const lowerPara = paragraph.toLowerCase()
+            if (lowerPara.includes('requirements') || 
+                lowerPara.includes('qualifications') || 
+                lowerPara.includes('what you') ||
+                lowerPara.includes('you have') ||
+                lowerPara.includes('must have') ||
+                lowerPara.includes('skills') ||
+                lowerPara.includes('experience with') ||
+                lowerPara.includes('minimum qualifications')) {
+              requirementsText += ' ' + paragraph.toLowerCase()
+            }
           })
           
-          requirementsSections.each((i, elem) => {
-            requirementsText += ' ' + $job(elem).text().toLowerCase()
-          })
-          
-          // If no specific requirements section found, fall back to job description
+          // If no specific requirements found, don't fall back to entire body
+          // Only use clearly job-related content
           if (requirementsText.length < 50) {
-            requirementsText = $job('body').text().toLowerCase()
+            // Look for bullet points or lists that might contain requirements
+            const listItems = $job('li, ul, ol').text().toLowerCase()
+            if (listItems && listItems.length > 50) {
+              requirementsText = listItems
+            } else {
+              // Last resort: use a small portion of the description, not the entire page
+              requirementsText = jobDescription.substring(0, 1000).toLowerCase()
+            }
+          }
+          
+          // Debug logging for problematic jobs
+          if (jobLink.title.includes('Manufacturing') || jobLink.title.includes('Inference') || jobLink.title.includes('GPU Platform')) {
+            console.log(`🔍 DEBUG for ${jobLink.title}:`)
+            console.log(`   Requirements text length: ${requirementsText.length}`)
+            console.log(`   Requirements preview: "${requirementsText.substring(0, 200)}..."`)
+            console.log(`   Job description length: ${jobDescription.length}`)
           }
           
           // Only extract skills that are actually mentioned in requirements
-          // Programming Languages
+          // Determine if this is a frontend role first (needed for skill detection)
+          const isFrontendRole = jobLink.title.toLowerCase().includes('frontend') || 
+                                 jobLink.title.toLowerCase().includes('front-end') ||
+                                 jobLink.title.toLowerCase().includes('ui') ||
+                                 jobLink.title.toLowerCase().includes('web developer') ||
+                                 jobLink.title.toLowerCase().includes('full stack') ||
+                                 jobLink.title.toLowerCase().includes('fullstack') ||
+                                 requirementsText.includes('frontend developer') ||
+                                 requirementsText.includes('web application')
+          
+          // Programming Languages (only when explicitly mentioned as requirements)
           if (requirementsText.includes('python') && !requirementsText.includes('monty python')) skills.push('Python')
-          if (requirementsText.includes('javascript') || requirementsText.includes(' js ')) skills.push('JavaScript')
+          
+          const hasJavaScript = isFrontendRole && (requirementsText.includes('javascript') || requirementsText.includes(' js ')) && 
+                                (requirementsText.includes('frontend') || requirementsText.includes('web') || requirementsText.includes('browser') || requirementsText.includes('node'))
+          if (hasJavaScript) skills.push('JavaScript')
+          
           if (requirementsText.includes('typescript') || requirementsText.includes(' ts ')) skills.push('TypeScript')
           if (requirementsText.includes('c++') || requirementsText.includes('cpp') || requirementsText.includes('c plus')) skills.push('C++')
           if (requirementsText.includes('go ') || requirementsText.includes('golang') || requirementsText.includes('go programming')) skills.push('Go')
@@ -274,28 +332,57 @@ export default async function handler(
           if (requirementsText.includes('java ') && !requirementsText.includes('javascript')) skills.push('Java')
           if (requirementsText.includes('swift') && (requirementsText.includes('ios') || requirementsText.includes('mobile'))) skills.push('Swift')
           
-          // AI/ML Technologies
+          // AI/ML Technologies (only when specifically mentioned as requirements)
           if (requirementsText.includes('pytorch') || requirementsText.includes('torch')) skills.push('PyTorch')
           if (requirementsText.includes('tensorflow') || requirementsText.includes(' tf ')) skills.push('TensorFlow')
-          if (requirementsText.includes('machine learning') || requirementsText.includes(' ml ') || requirementsText.includes('artificial intelligence')) skills.push('Machine Learning')
+          
+          const hasMLSkills = (requirementsText.includes('machine learning') || requirementsText.includes(' ml ') || requirementsText.includes('artificial intelligence')) &&
+                              (requirementsText.includes('experience') || requirementsText.includes('background') || requirementsText.includes('knowledge'))
+          if (hasMLSkills) skills.push('Machine Learning')
+          
           if (requirementsText.includes('deep learning') || requirementsText.includes('neural network')) skills.push('Deep Learning')
           if (requirementsText.includes('cuda') || requirementsText.includes('gpu programming')) skills.push('CUDA')
           if (requirementsText.includes('transformers') || requirementsText.includes('llm') || requirementsText.includes('large language model')) skills.push('LLM/Transformers')
           
-          // Infrastructure & DevOps
+          // Infrastructure & DevOps (only when explicitly mentioned as requirements)
           if (requirementsText.includes('kubernetes') || requirementsText.includes('k8s')) skills.push('Kubernetes')
           if (requirementsText.includes('docker') || requirementsText.includes('containerization')) skills.push('Docker')
-          if (requirementsText.includes('aws') || requirementsText.includes('amazon web services')) skills.push('AWS')
-          if (requirementsText.includes('gcp') || requirementsText.includes('google cloud')) skills.push('Google Cloud')
-          if (requirementsText.includes('azure') || requirementsText.includes('microsoft cloud')) skills.push('Azure')
+          
+          const hasAWS = requirementsText.includes('aws') || requirementsText.includes('amazon web services')
+          if (hasAWS && (requirementsText.includes('cloud') || requirementsText.includes('infrastructure') || requirementsText.includes('deployment'))) skills.push('AWS')
+          
+          const hasGCP = requirementsText.includes('gcp') || requirementsText.includes('google cloud')
+          if (hasGCP && (requirementsText.includes('cloud') || requirementsText.includes('infrastructure') || requirementsText.includes('deployment'))) skills.push('Google Cloud')
+          
+          const hasAzure = requirementsText.includes('azure') || requirementsText.includes('microsoft cloud')  
+          if (hasAzure && (requirementsText.includes('cloud') || requirementsText.includes('infrastructure') || requirementsText.includes('deployment'))) skills.push('Azure')
+          
           if (requirementsText.includes('distributed systems')) skills.push('Distributed Systems')
           if (requirementsText.includes('microservices') || requirementsText.includes('micro-services')) skills.push('Microservices')
           
-          // Frontend Technologies
-          if (requirementsText.includes('react') && !requirementsText.includes('reaction')) skills.push('React')
+          // Frontend Technologies (VERY strict matching - only for clearly frontend roles)
+          
+          const hasReactFramework = isFrontendRole && (requirementsText.includes('react.js') || 
+                                    requirementsText.includes('react js') ||
+                                    requirementsText.includes('reactjs') ||
+                                    requirementsText.includes('react framework') ||
+                                    requirementsText.includes('react library')) &&
+                                   !requirementsText.includes('reactive') &&
+                                   !requirementsText.includes('reaction') &&
+                                   !requirementsText.includes('react to') &&
+                                   !requirementsText.includes('react quickly')
+          
+          if (hasReactFramework) skills.push('React')
           if (requirementsText.includes('vue') || requirementsText.includes('vue.js')) skills.push('Vue.js')
-          if (requirementsText.includes('angular') && !requirementsText.includes('rectangular')) skills.push('Angular')
-          if (requirementsText.includes('html') || requirementsText.includes('css')) skills.push('HTML/CSS')
+          
+          const hasAngularFramework = requirementsText.includes('angular') && 
+                                     !requirementsText.includes('rectangular') && 
+                                     (requirementsText.includes('framework') || requirementsText.includes('typescript') || requirementsText.includes('frontend'))
+          if (hasAngularFramework) skills.push('Angular')
+          
+          const hasHTMLCSS = isFrontendRole && (requirementsText.includes('html') || requirementsText.includes('css')) && 
+                             (requirementsText.includes('frontend') || requirementsText.includes('web') || requirementsText.includes('ui') || requirementsText.includes('website'))
+          if (hasHTMLCSS) skills.push('HTML/CSS')
           
           // Databases
           if (requirementsText.includes('postgresql') || requirementsText.includes('postgres')) skills.push('PostgreSQL')
@@ -348,7 +435,12 @@ export default async function handler(
           }
           
           // Other Technical Skills  
-          if (requirementsText.includes('git') && !requirementsText.includes('digit')) skills.push('Git')
+          const hasGit = requirementsText.includes('git') && 
+                         !requirementsText.includes('digit') && 
+                         !requirementsText.includes('digital') &&
+                         (requirementsText.includes('version control') || requirementsText.includes('repository') || requirementsText.includes('github') || requirementsText.includes('gitlab'))
+          if (hasGit) skills.push('Git')
+          
           if (requirementsText.includes('linux') || requirementsText.includes('unix')) skills.push('Linux/Unix')
           if (requirementsText.includes('rest api') || requirementsText.includes('restful')) skills.push('REST APIs')
           if (requirementsText.includes('graphql') || requirementsText.includes('graph ql')) skills.push('GraphQL')
@@ -374,6 +466,7 @@ export default async function handler(
             salary: salaryInfo.salary,
             salary_min: salaryInfo.min,
             salary_max: salaryInfo.max,
+            description: jobDescription.substring(0, 2000), // Save first 2000 chars for debugging
             skills: uniqueSkills
           }
           

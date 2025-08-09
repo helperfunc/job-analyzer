@@ -9,12 +9,14 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.43.0",
+    "@types/puppeteer": "^7.0.4",
     "cheerio": "^1.0.0-rc.12",
     "next": "14.2.3",
     "openai": "^4.52.0",
+    "puppeteer": "^24.16.0",
     "react": "^18",
-    "react-dom": "^18",
-    "@supabase/supabase-js": "^2.43.0"
+    "react-dom": "^18"
   },
   "devDependencies": {
     "@types/node": "^20",

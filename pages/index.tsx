@@ -84,6 +84,30 @@ export default function Home() {
     localStorage.removeItem('openai-jobs-analysis-result')
   }
 
+  const refreshStats = async () => {
+    setLoading(true)
+    setError('')
+    
+    try {
+      const res = await fetch('/api/get-summary', {
+        method: 'GET',
+      })
+
+      if (!res.ok) {
+        throw new Error('获取统计失败')
+      }
+
+      const data = await res.json()
+      setResult(data)
+      // Save the refreshed results
+      localStorage.setItem('openai-jobs-analysis-result', JSON.stringify(data))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '获取统计失败，请重试')
+    } finally {
+      setLoading(false)
+    }
+  }
+
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-4xl mx-auto p-8">
@@ -110,6 +134,13 @@ export default function Home() {
               className="flex-1 bg-blue-500 text-white p-3 rounded-lg hover:bg-blue-600 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
             >
               {loading ? '分析中...' : '快速分析职位'}
+            </button>
+            <button
+              onClick={refreshStats}
+              disabled={loading}
+              className="bg-green-500 text-white px-4 py-3 rounded-lg hover:bg-green-600 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+            >
+              {loading ? '刷新中...' : '刷新统计'}
             </button>
             {result && (
               <button
