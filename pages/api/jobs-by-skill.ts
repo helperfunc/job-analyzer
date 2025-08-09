@@ -21,21 +21,25 @@ export default async function handler(
     return res.status(405).json({ error: 'Method not allowed' })
   }
 
-  const { skill } = req.query
+  const { skill, company } = req.query
 
   if (!skill || typeof skill !== 'string') {
     return res.status(400).json({ error: 'Skill parameter is required' })
   }
 
+  // Default to openai if no company specified
+  const companyFilter = company ? company.toString().toLowerCase() : 'openai'
+  console.log(`🔍 Filtering jobs by skill '${skill}' for company: ${companyFilter}`)
+
   try {
-    // Read the latest job data
+    // Read the latest job data for the specified company
     const dataDir = path.join(process.cwd(), 'data')
     
     if (!fs.existsSync(dataDir)) {
       return res.status(404).json({ error: 'No job data found' })
     }
 
-    const files = fs.readdirSync(dataDir).filter(f => f.startsWith('openai-jobs-') && f.endsWith('.json'))
+    const files = fs.readdirSync(dataDir).filter(f => f.startsWith(`${companyFilter}-jobs-`) && f.endsWith('.json'))
     
     if (files.length === 0) {
       return res.status(404).json({ error: 'No job data files found' })

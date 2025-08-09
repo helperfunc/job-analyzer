@@ -2,6 +2,7 @@ import { NextApiRequest, NextApiResponse } from 'next'
 import * as cheerio from 'cheerio'
 import fs from 'fs'
 import path from 'path'
+import puppeteer from 'puppeteer'
 
 interface Job {
   title: string
@@ -20,16 +21,85 @@ interface Job {
 function extractSalary(text: string): { salary?: string; min?: number; max?: number } {
   // Look for salary range patterns first (higher priority)
   const rangeSalaryPatterns = [
+    // Greenhouse specific patterns with HTML comments (highest priority)
+    /\$([0-9,]+)<!--.*?-->\s*-\s*<!--.*?-->\$([0-9,]+)<!--.*?-->\s*<!--.*?-->USD/i,
+    /Annual\s+Salary:.*?\$([0-9,]+)<!--.*?-->\s*-\s*<!--.*?-->\$([0-9,]+)<!--.*?-->\s*<!--.*?-->USD/i,
+    // Standard patterns
     /\$(\d{3,})[Kk]?\s*[-–]\s*\$(\d{3,})[Kk]?/,
     /\$(\d{3,}),(\d{3})\s*[-–]\s*\$(\d{3,}),(\d{3})/,
-    /USD\s*(\d{3,})[Kk]?\s*[-–]\s*(\d{3,})[Kk]?/
+    /USD\s*(\d{3,})[Kk]?\s*[-–]\s*(\d{3,})[Kk]?/,
+    // Annual salary patterns
+    /Annual\s+Salary:\s*\$(\d{3,}),(\d{3})\s*[-–]\s*\$(\d{3,}),(\d{3})\s*USD/i,
+    /Salary:\s*\$(\d{3,}),(\d{3})\s*[-–]\s*\$(\d{3,}),(\d{3})\s*USD/i,
+    // Euro patterns - support both dot and comma separators
+    /€(\d{1,3}(?:[.,]\d{3})*)\s*[-–]\s*€(\d{1,3}(?:[.,]\d{3})*)\s*EUR/i,
+    // Annual Salary EUR patterns
+    /Annual\s+Salary:\s*€(\d{1,3}(?:[.,]\d{3})*)\s*[-–]\s*€(\d{1,3}(?:[.,]\d{3})*)\s*EUR/i,
+    /Salary:\s*€(\d{1,3}(?:[.,]\d{3})*)\s*[-–]\s*€(\d{1,3}(?:[.,]\d{3})*)\s*EUR/i,
+    // More flexible EUR patterns
+    /€(\d{1,3}(?:[.,]\d{3})*)\s*[-–]\s*€(\d{1,3}(?:[.,]\d{3})*)/i,
+    // GBP/Pound patterns
+    /£(\d{1,3}(?:[.,]\d{3})*)\s*[-–]\s*£(\d{1,3}(?:[.,]\d{3})*)/i,
+    /GBP\s*(\d{1,3}(?:[.,]\d{3})*)\s*[-–]\s*GBP\s*(\d{1,3}(?:[.,]\d{3})*)/i
   ]
   
   for (const pattern of rangeSalaryPatterns) {
     const match = text.match(pattern)
     if (match) {
       let min, max
-      if (match[0].includes(',')) {
+      let isEuro = match[0].includes('€') || match[0].includes('EUR')
+      let isPound = match[0].includes('£') || match[0].includes('GBP')
+      let isGreenhouse = match[0].includes('<!--')
+      
+      if (isGreenhouse) {
+        // Greenhouse HTML format: $425,000<!-- --> - <!-- -->$560,000<!-- --> <!-- -->USD
+        const minStr = match[1].replace(/,/g, '')
+        const maxStr = match[2].replace(/,/g, '')
+        min = parseInt(minStr) / 1000 // Convert to K
+        max = parseInt(maxStr) / 1000
+        
+        return {
+          salary: `$${match[1]} – $${match[2]} USD`,
+          min: Math.round(min),
+          max: Math.round(max)
+        }
+      } else if (isEuro) {
+        // Euro format: €235.000 - €355.000 EUR or €235,000 - €355,000 EUR
+        const minStr = match[1].replace(/[.,]/g, '') // Remove dots/commas
+        const maxStr = match[2].replace(/[.,]/g, '')
+        min = parseInt(minStr) / 1000 // Convert to K
+        max = parseInt(maxStr) / 1000
+        
+        // Convert EUR to USD (approximate rate: 1 EUR = 1.1 USD)
+        min = Math.round(min * 1.1)
+        max = Math.round(max * 1.1)
+        
+        return {
+          salary: `$${min}K – $${max}K (converted from EUR)`,
+          min,
+          max
+        }
+      } else if (isPound) {
+        // GBP format: £235,000 - £355,000 or GBP 235,000 - GBP 355,000
+        const minStr = match[1].replace(/[.,]/g, '') // Remove dots/commas
+        const maxStr = match[2].replace(/[.,]/g, '')
+        min = parseInt(minStr) / 1000 // Convert to K
+        max = parseInt(maxStr) / 1000
+        
+        // Convert GBP to USD (approximate rate: 1 GBP = 1.27 USD)
+        min = Math.round(min * 1.27)
+        max = Math.round(max * 1.27)
+        
+        return {
+          salary: `$${min}K – $${max}K (converted from GBP)`,
+          min,
+          max
+        }
+      } else if (match[0].includes('Annual') || match[0].includes('Salary:')) {
+        // Format: Annual Salary: $XXX,XXX - $XXX,XXX USD
+        min = parseInt(match[1] + match[2]) / 1000
+        max = parseInt(match[3] + match[4]) / 1000
+      } else if (match[0].includes(',')) {
         // Format: $XXX,XXX - $XXX,XXX
         min = parseInt(match[1] + match[2]) / 1000
         max = parseInt(match[3] + match[4]) / 1000
@@ -56,7 +126,7 @@ function extractSalary(text: string): { salary?: string; min?: number; max?: num
   
   // Look for single salary patterns (like $325K + Offers Equity)
   const singleSalaryPatterns = [
-    /\$(\d{3,})[Kk]?\s*\+\s*Offers?\s*Equity/i,
+    /\$(\d{3,})[Kk]?(?:\s*\+\s*Offers?\s*Equity)?/i,
     /\$(\d{3,})[Kk]?\s*\+/i,
     /\$(\d{3,})[Kk]?(?!\s*[-–])/i
   ]
@@ -74,12 +144,19 @@ function extractSalary(text: string): { salary?: string; min?: number; max?: num
         amount = amount / 1000
       }
       
-      // For single salary, estimate a range (±20%)
-      const min = Math.round(amount * 0.8)
-      const max = Math.round(amount * 1.2)
+      // For single salary with equity, don't create artificial range
+      // Use the actual amount as both min and max
+      const min = amount
+      const max = amount
+      
+      // Clean up salary string - remove "+ Offers Equity" suffix
+      let salaryStr = match[0]
+      if (salaryStr.includes('Offers Equity')) {
+        salaryStr = salaryStr.replace(/\s*\+\s*Offers?\s*Equity/i, '').trim()
+      }
       
       return {
-        salary: match[0],
+        salary: salaryStr,
         min,
         max
       }
@@ -98,32 +175,407 @@ export default async function handler(
   }
 
   try {
-    console.log('🔍 Starting OpenAI careers scraping...')
-    
-    // First, get the main careers page
-    const mainUrl = 'https://openai.com/careers/search/'
-    const response = await fetch(mainUrl, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.9',
-        'Cache-Control': 'no-cache',
-        'Pragma': 'no-cache'
+    const scrapingLogic = async () => {
+      const { url } = req.body
+      
+      // Detect which company we're scraping
+      const isAnthropic = url.includes('anthropic.com') || url.includes('greenhouse.io/anthropic')
+      const isOpenAI = url.includes('openai.com')
+      
+      // Set timeout based on company - longer for Anthropic due to many pages
+      const timeout = isAnthropic ? 300000 : 120000 // 5 minutes for Anthropic, 2 minutes for others
+      
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Scraping timeout')), timeout)
+      })
+      
+      const companyName = isAnthropic ? 'Anthropic' : isOpenAI ? 'OpenAI' : 'Unknown'
+      console.log(`🔍 Starting ${companyName} careers scraping...`)
+      
+      // Use the provided URL
+      const mainUrl = url
+      let html: string
+      
+      // Temporarily disable Puppeteer to debug - use enhanced fetch for all companies
+      console.log(`🔍 Using enhanced fetch for ${companyName}...`)
+      const response = await fetch(mainUrl, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.9',
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache'
+        }
+      })
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch careers page: ${response.status}`)
       }
-    })
-    
-    if (!response.ok) {
-      throw new Error(`Failed to fetch careers page: ${response.status}`)
-    }
 
-    const html = await response.text()
-    console.log(`📄 Received HTML (${html.length} bytes)`)
+      html = await response.text()
+      console.log(`📄 Received HTML (${html.length} bytes)`)
+      
+      if (false) { // Disabled block
+        // For other companies (like Anthropic), use regular fetch
+        // For other companies (like Anthropic), use regular fetch
+        const response = await fetch(mainUrl, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Cache-Control': 'no-cache',
+            'Pragma': 'no-cache'
+          }
+        })
+        
+        if (!response.ok) {
+          throw new Error(`Failed to fetch careers page: ${response.status}`)
+        }
+
+        html = await response.text()
+        console.log(`📄 Received HTML (${html.length} bytes)`)
+      }
+    
+    // For Anthropic, wait 5 seconds and try to fetch the page again to allow dynamic content to load
+    if (isAnthropic) {
+      console.log('⏳ Anthropic page detected - waiting 5 seconds for dynamic content to load...')
+      console.log('💡 This delay allows JavaScript to render job listings that might be loaded dynamically')
+      
+      // Wait 5 seconds
+      await new Promise(resolve => setTimeout(resolve, 5000))
+      
+      console.log('🔄 Re-fetching Anthropic page after waiting...')
+      
+      // Fetch the page again after waiting
+      try {
+        const delayedResponse = await fetch(mainUrl, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Cache-Control': 'no-cache',
+            'Pragma': 'no-cache'
+          }
+        })
+        
+        if (delayedResponse.ok) {
+          const delayedHtml = await delayedResponse.text()
+          console.log(`📄 Delayed HTML (${delayedHtml.length} bytes)`)
+          
+          // Use the delayed HTML if it's different or longer
+          if (delayedHtml.length > html.length * 1.1) { // 10% more content
+            console.log('✅ Using delayed HTML as it contains significantly more content')
+            html = delayedHtml
+          } else if (delayedHtml.includes('job') && delayedHtml.includes('position')) {
+            console.log('✅ Using delayed HTML as it contains job-related content')  
+            html = delayedHtml
+          } else {
+            console.log('⚠️ Delayed HTML is not significantly different, using original')
+          }
+        }
+      } catch (delayedError) {
+        console.log('❌ Error in delayed fetch:', delayedError instanceof Error ? delayedError.message : 'Unknown error')
+        console.log('💡 Continuing with original HTML...')
+      }
+    }
+    
+    // Initialize jobs array and processed URLs
+    let jobs: Job[] = []
+    const processedUrls = new Set<string>()
+    
+    // For Anthropic, let's try to find API endpoints or data in the HTML
+    if (isAnthropic) {
+      console.log('🔍 Searching for Anthropic API endpoints...')
+      
+      // Look for potential API endpoints in the HTML
+      const apiMatches = html.match(/(https?:\/\/[^\s"']+(?:api|jobs|careers)[^\s"']*)/gi)
+      if (apiMatches) {
+        console.log('🔗 Found potential API URLs:', apiMatches.slice(0, 5))
+      }
+      
+      // Look for JSON data in script tags
+      const jsonMatches = html.match(/<script[^>]*>(.*?jobs.*?)<\/script>/gis)
+      if (jsonMatches) {
+        console.log('📊 Found potential job data in scripts:', jsonMatches.length, 'matches')
+      }
+      
+      // Try the specific Anthropic job board URL first (support pagination)
+      console.log('🎯 Trying Anthropic Greenhouse job board with pagination...')
+      
+      // Collect jobs from all pages (focus on first 3 pages for better performance)
+      const allJobs: any[] = []
+      const maxPages = 3 // Focus on first 3 pages to reduce timeout
+      
+      for (let page = 1; page <= maxPages; page++) {
+        const startTime = Date.now()
+        console.log(`📄 Fetching page ${page}/${maxPages}... (${allJobs.length} jobs so far)`)
+        
+        try {
+          const pageUrl = page === 1 
+            ? 'https://job-boards.greenhouse.io/anthropic'
+            : `https://job-boards.greenhouse.io/anthropic?page=${page}`
+            
+          const greenhouseResponse = await fetch(pageUrl, {
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+              'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+              'Accept-Language': 'en-US,en;q=0.9',
+            }
+          })
+          
+          if (greenhouseResponse.ok) {
+            const greenhouseHtml = await greenhouseResponse.text()
+            console.log(`✅ Greenhouse page ${page} accessible (${greenhouseHtml.length} bytes)`)
+            
+            // Parse Greenhouse HTML for job listings
+            const $greenhouse = cheerio.load(greenhouseHtml)
+          
+          // Greenhouse job board selectors
+          const jobElements = new Set() // Prevent duplicates
+          
+          // First, collect all job links
+          const jobLinks: {title: string, url: string, department: string, skills: string[]}[] = []
+          
+          $greenhouse('a[href*="/jobs/"]').each((i, elem) => {
+            const $elem = $greenhouse(elem)
+            const jobUrl = $elem.attr('href')
+            
+            // Skip if already processed this URL
+            if (!jobUrl || processedUrls.has(jobUrl)) return
+            
+            let title = $elem.text().trim()
+            
+            // Clean up title - remove location suffixes
+            title = title.replace(/\s*(San Francisco, CA|Seattle, WA|New York City, NY|London, UK|Remote-Friendly.*?)$/gi, '')
+                        .replace(/\s*New$/gi, '') // Remove "New" suffix
+                        .replace(/\s+/g, ' ')
+                        .trim()
+            
+            if (title && title.length > 5 && title.length < 150) {
+              // Accept all job titles for Anthropic - much broader criteria
+              // This will capture Finance, Legal, Marketing, Communications, etc.
+              
+              // Extract department from title (expanded for all Anthropic departments)
+              let department = 'Other'
+              const titleLower = title.toLowerCase()
+              
+              if (titleLower.includes('engineer') || titleLower.includes('technical') || titleLower.includes('software')) department = 'Engineering'
+              else if (titleLower.includes('research') || titleLower.includes('scientist')) department = 'Research'
+              else if (titleLower.includes('product')) department = 'Product'
+              else if (titleLower.includes('policy') || titleLower.includes('societal')) department = 'Policy'
+              else if (titleLower.includes('safety')) department = 'Safety'
+              else if (titleLower.includes('security')) department = 'Security'
+              else if (titleLower.includes('design') || titleLower.includes('ux') || titleLower.includes('ui')) department = 'Design'
+              else if (titleLower.includes('data') || titleLower.includes('analytics')) department = 'Data'
+              else if (titleLower.includes('finance') || titleLower.includes('accounting') || titleLower.includes('treasury')) department = 'Finance'
+              else if (titleLower.includes('legal') || titleLower.includes('counsel')) department = 'Legal'
+              else if (titleLower.includes('marketing') || titleLower.includes('brand')) department = 'Marketing'
+              else if (titleLower.includes('communication') || titleLower.includes('content')) department = 'Communications'
+              else if (titleLower.includes('compute') || titleLower.includes('capacity')) department = 'Compute'
+              
+              // Infer skills from title
+              const inferredSkills: string[] = []
+              
+              // Core AI/ML skills
+              if (titleLower.includes('machine learning') || titleLower.includes('ml ')) {
+                inferredSkills.push('Machine Learning')
+              }
+              if (titleLower.includes('research')) {
+                inferredSkills.push('AI Safety', 'Research Publications', 'PyTorch', 'Python')
+              }
+              if (titleLower.includes('engineer')) {
+                inferredSkills.push('Python')
+                if (titleLower.includes('software')) inferredSkills.push('Software Engineering')
+                if (titleLower.includes('ml') || titleLower.includes('ai') || titleLower.includes('inference')) inferredSkills.push('Machine Learning', 'PyTorch')
+                if (titleLower.includes('manager')) inferredSkills.push('Leadership', 'Project Management', 'Team Management')
+              }
+              if (titleLower.includes('scientist')) {
+                inferredSkills.push('Machine Learning', 'Python', 'Research Publications')
+              }
+              if (titleLower.includes('safety') || titleLower.includes('alignment')) {
+                inferredSkills.push('AI Safety', 'Constitutional AI')
+              }
+              if (titleLower.includes('infrastructure') || titleLower.includes('platform')) {
+                inferredSkills.push('Distributed Systems', 'Kubernetes', 'Python')
+              }
+              if (titleLower.includes('security')) {
+                inferredSkills.push('Security Engineering', 'Python')
+              }
+              if (titleLower.includes('policy')) {
+                inferredSkills.push('Policy Development', 'AI Safety')
+              }
+              if (titleLower.includes('finance') || titleLower.includes('accounting')) {
+                inferredSkills.push('Financial Analysis', 'Accounting')
+              }
+              if (titleLower.includes('legal') || titleLower.includes('counsel')) {
+                inferredSkills.push('Legal Analysis', 'Contract Law')
+              }
+              if (titleLower.includes('marketing') || titleLower.includes('brand')) {
+                inferredSkills.push('Marketing Strategy', 'Brand Management')
+              }
+              if (titleLower.includes('communication') || titleLower.includes('content')) {
+                inferredSkills.push('Content Strategy', 'Communications')
+              }
+              if (titleLower.includes('data') && titleLower.includes('analytics')) {
+                inferredSkills.push('Data Analytics', 'SQL', 'Python')
+              }
+              
+              jobLinks.push({
+                title,
+                url: jobUrl,
+                department,
+                skills: [...new Set(inferredSkills)]
+              })
+              processedUrls.add(jobUrl)
+            }
+          })
+          
+          console.log(`📋 Found ${jobLinks.length} job links on page ${page}`)
+          
+          // Process jobs in batches for better performance
+          const BATCH_SIZE = 5
+          const processBatch = async (batch: any[]) => {
+            return Promise.all(batch.map(async (jobLink) => {
+              // Try to extract real salary by fetching the individual job page
+              let salaryMin, salaryMax, salaryString = undefined
+              const titleLower = jobLink.title.toLowerCase()
+              
+              try {
+                const jobPageResponse = await fetch(jobLink.url, {
+                  headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                    'Accept-Language': 'en-US,en;q=0.9',
+                  }
+                })
+                
+                if (jobPageResponse.ok) {
+                  const jobPageHtml = await jobPageResponse.text()
+                  
+                  // Look for salary information in various HTML patterns
+                  const salaryPatterns = [
+                    // Greenhouse specific patterns with HTML comments
+                    /\$([0-9,]+)<!--.*?-->\s*-\s*<!--.*?-->\$([0-9,]+)<!--.*?-->\s*<!--.*?-->USD/i,
+                    /Annual\s+Salary:.*?\$([0-9,]+)<!--.*?-->\s*-\s*<!--.*?-->\$([0-9,]+)<!--.*?-->\s*<!--.*?-->USD/i,
+                    // Standard patterns
+                    /\$([0-9,]+)\s*(?:-|–|to)\s*\$([0-9,]+)\s*USD/i,
+                    /Annual\s+Salary:\s*\$([0-9,]+)\s*(?:-|–|to)\s*\$([0-9,]+)\s*USD/i,
+                    /salary[^:]*:?\s*\$([0-9,]+)\s*(?:-|–|to)\s*\$([0-9,]+)/i
+                  ]
+                  
+                  for (const pattern of salaryPatterns) {
+                    const match = jobPageHtml.match(pattern)
+                    if (match) {
+                      const minStr = match[1].replace(/,/g, '')
+                      const maxStr = match[2].replace(/,/g, '')
+                      salaryMin = Math.round(parseInt(minStr) / 1000)
+                      salaryMax = Math.round(parseInt(maxStr) / 1000)
+                      salaryString = `$${match[1]} – $${match[2]} USD`
+                      break
+                    }
+                  }
+                  
+                  // If still no salary found, use the general extractSalary function
+                  if (!salaryString) {
+                    const extracted = extractSalary(jobPageHtml)
+                    if (extracted.salary) {
+                      salaryString = extracted.salary
+                      salaryMin = extracted.min
+                      salaryMax = extracted.max
+                    }
+                  }
+                }
+              } catch (error) {
+                // Silently handle errors for batch processing
+              }
+              
+              // For Anthropic, don't use estimated salaries
+              // Leave salary as undefined if not found
+              if (!salaryString) {
+                salaryMin = undefined
+                salaryMax = undefined
+                salaryString = undefined
+              }
+              
+              return {
+                title: jobLink.title,
+                url: jobLink.url,
+                location: 'San Francisco',
+                department: jobLink.department,
+                salary: salaryString,
+                salary_min: salaryMin,
+                salary_max: salaryMax,
+                skills: jobLink.skills
+              }
+            }))
+          }
+          
+          // Process jobs in batches
+          for (let i = 0; i < jobLinks.length; i += BATCH_SIZE) {
+            const batch = jobLinks.slice(i, i + BATCH_SIZE)
+            console.log(`🔄 Processing batch ${Math.floor(i/BATCH_SIZE) + 1}/${Math.ceil(jobLinks.length/BATCH_SIZE)} (${batch.length} jobs)...`)
+            
+            const batchResults = await processBatch(batch)
+            allJobs.push(...batchResults)
+            
+            // Log sample of completed jobs with salaries
+            const jobsWithSalaries = batchResults.filter(j => j.salary && !j.salary.includes('estimated'))
+            const sampleJob = jobsWithSalaries.length > 0 ? jobsWithSalaries[0] : batchResults[0]
+            
+            console.log(`✅ Completed batch ${Math.floor(i/BATCH_SIZE) + 1}: ${batchResults.length} jobs processed`)
+            console.log(`   Sample: ${sampleJob.title} - ${sampleJob.salary}`)
+            console.log(`   Real salaries found: ${jobsWithSalaries.length}/${batchResults.length}`)
+            
+            // Short delay between batches
+            if (i + BATCH_SIZE < jobLinks.length) {
+              await new Promise(resolve => setTimeout(resolve, 100))
+            }
+          }
+          
+          const pageTime = Date.now() - startTime
+          console.log(`✅ Page ${page} processed in ${pageTime}ms: found ${allJobs.length - (page-1)*47} new jobs`)
+          
+          } else {
+            console.log(`❌ Greenhouse page ${page} not accessible: ${greenhouseResponse.status}`)
+            break // Stop trying remaining pages if one fails
+          }
+          
+        } catch (error) {
+          console.log(`❌ Error accessing Greenhouse page ${page}: ${error instanceof Error ? error.message : 'Unknown error'}`)
+          continue // Try next page even if current fails
+        }
+        
+        // Reduced delay between pages for faster processing
+        if (page < maxPages) {
+          await new Promise(resolve => setTimeout(resolve, 100))
+        }
+      }
+      
+      // Add all collected jobs to the main jobs array
+      jobs.push(...allJobs)
+      
+      const realSalariesCount = allJobs.filter(j => j.salary && !j.salary.includes('estimated')).length
+      console.log(`🎯 Total Greenhouse jobs collected: ${allJobs.length}`)
+      console.log(`💰 Real salaries found: ${realSalariesCount}/${allJobs.length} (${Math.round(realSalariesCount/allJobs.length*100)}%)`)
+      
+      // Show top 3 highest paying jobs for quick verification
+      const topPaying = allJobs
+        .filter(j => j.salary_max > 0)
+        .sort((a, b) => b.salary_max - a.salary_max)
+        .slice(0, 3)
+      
+      console.log(`🏆 Top paying jobs found:`)
+      topPaying.forEach((job, i) => {
+        console.log(`   ${i+1}. ${job.title}: ${job.salary}`)
+      })
+      
+      // If no jobs found from Greenhouse, continue with main page processing
+      if (jobs.length === 0) {
+        console.log('⚠️ No jobs found from Greenhouse, will check main page after delay')
+      }
+    }
     
     const $ = cheerio.load(html)
-    
-    // Look for job data in script tags or data attributes
-    const jobs: Job[] = []
-    const processedUrls = new Set<string>()
     
     // Method 1: Look for structured data in script tags
     $('script[type="application/ld+json"]').each((i, elem) => {
@@ -169,8 +621,19 @@ export default async function handler(
       const href = $elem.attr('href') || ''
       const text = $elem.text().trim()
       
-      // Check if this looks like a job posting link
-      if (href.includes('/careers/') && text && !processedUrls.has(href)) {
+      // Different URL patterns for different companies
+      let isJobLink = false
+      let baseUrl = ''
+      
+      if (isOpenAI && href.includes('/careers/') && text && !processedUrls.has(href)) {
+        isJobLink = true
+        baseUrl = 'https://openai.com'
+      } else if (isAnthropic && (href.includes('/careers/') || href.includes('/job/')) && text && !processedUrls.has(href)) {
+        isJobLink = true
+        baseUrl = 'https://www.anthropic.com'
+      }
+      
+      if (isJobLink) {
         // Get the parent container to find more context
         const $container = $elem.closest('div, article, section, li')
         const containerText = $container.text()
@@ -185,13 +648,33 @@ export default async function handler(
         else if (containerText.includes('Dublin')) location = 'Dublin'
         else if (containerText.includes('Seattle')) location = 'Seattle'
         
-        // Only add if it looks like a real job title
-        if (text.length > 5 && text.length < 100 && 
+        // Accept all potential job titles (very broad criteria for OpenAI)
+        if (text.length > 5 && text.length < 150 && 
+            // Much more inclusive - include finance, legal, marketing, etc.
             (text.includes('Engineer') || text.includes('Scientist') || 
              text.includes('Researcher') || text.includes('Manager') ||
-             text.includes('Director') || text.includes('Analyst'))) {
+             text.includes('Director') || text.includes('Analyst') ||
+             text.includes('Lead') || text.includes('Senior') ||
+             text.includes('Staff') || text.includes('Principal') ||
+             text.includes('Specialist') || text.includes('Coordinator') ||
+             text.includes('Associate') || text.includes('Designer') ||
+             text.includes('Consultant') || text.includes('Developer') ||
+             text.includes('Administrator') || text.includes('Officer') ||
+             text.includes('Advisor') || text.includes('Representative') ||
+             text.includes('Assistant') || text.includes('Intern') ||
+             // Add more job types for completeness
+             text.includes('Counsel') || text.includes('Legal') ||
+             text.includes('Finance') || text.includes('Accounting') ||
+             text.includes('Marketing') || text.includes('Communications') ||
+             text.includes('Business') || text.includes('Operations') ||
+             text.includes('Strategy') || text.includes('Sales') ||
+             text.includes('Content') || text.includes('Editorial') ||
+             text.includes('Policy') || text.includes('Compliance') ||
+             text.includes('Security') || text.includes('Safety') ||
+             text.includes('Head of') || text.includes('VP') ||
+             text.includes('Chief'))) {
           
-          const fullUrl = href.startsWith('http') ? href : `https://openai.com${href}`
+          const fullUrl = href.startsWith('http') ? href : `${baseUrl}${href}`
           jobLinks.push({
             title: text,
             url: fullUrl,
@@ -533,8 +1016,8 @@ export default async function handler(
           errorCount++
         }
         
-        // Small delay to avoid overwhelming the server
-        await new Promise(resolve => setTimeout(resolve, 100))
+        // Reduced delay for faster processing
+        await new Promise(resolve => setTimeout(resolve, 50))
         
       } catch (error) {
         console.log(`❌ Error: ${error instanceof Error ? error.message : 'Unknown'}`)
@@ -548,15 +1031,30 @@ export default async function handler(
     if (jobs.length === 0) {
       console.log('⚠️ No jobs found with standard methods, trying alternative parsing...')
       
-      // Look for any element that might contain job listings
-      const selectors = [
-        '[data-job]',
-        '[class*="job-listing"]',
-        '[class*="career"]',
-        '[role="listitem"]',
-        '.job-item',
-        'article'
-      ]
+      // Different selectors for different companies
+      let selectors = []
+      if (isAnthropic) {
+        selectors = [
+          '[data-job]',
+          '[class*="job"]',
+          '[class*="position"]', 
+          '[class*="role"]',
+          '[class*="career"]',
+          '[role="listitem"]',
+          'article',
+          '.position-item',
+          'li'
+        ]
+      } else {
+        selectors = [
+          '[data-job]',
+          '[class*="job-listing"]',
+          '[class*="career"]',
+          '[role="listitem"]',
+          '.job-item',
+          'article'
+        ]
+      }
       
       for (const selector of selectors) {
         $(selector).each((i, elem) => {
@@ -564,18 +1062,24 @@ export default async function handler(
           const text = $elem.text()
           
           // Try to extract job info from the element
-          const titleElem = $elem.find('h2, h3, h4, [class*="title"]').first()
+          const titleElem = $elem.find('h2, h3, h4, [class*="title"], a').first()
           const title = titleElem.text().trim()
           
-          if (title && title.length > 5 && title.length < 100) {
+          if (title && title.length > 5 && title.length < 100 &&
+              (title.includes('Engineer') || title.includes('Scientist') || 
+               title.includes('Researcher') || title.includes('Manager') ||
+               title.includes('Director') || title.includes('Analyst') ||
+               title.includes('Lead') || title.includes('Staff'))) {
+            
             const linkElem = $elem.find('a').first()
             const href = linkElem.attr('href') || ''
             
             const salaryInfo = extractSalary(text)
+            const baseUrlForJob = isAnthropic ? 'https://www.anthropic.com' : 'https://openai.com'
             
             const job: Job = {
               title,
-              url: href.startsWith('http') ? href : `https://openai.com${href}`,
+              url: href.startsWith('http') ? href : `${baseUrlForJob}${href}`,
               location: text.includes('Remote') ? 'Remote' : 'San Francisco',
               department: 'Engineering',
               salary: salaryInfo.salary,
@@ -586,19 +1090,24 @@ export default async function handler(
             if (!processedUrls.has(job.url)) {
               jobs.push(job)
               processedUrls.add(job.url)
+              console.log(`🔍 Found alternative job: ${title}`)
             }
           }
         })
         
-        if (jobs.length > 0) break
+        if (jobs.length > 0) {
+          console.log(`✅ Found ${jobs.length} jobs using selector: ${selector}`)
+          break
+        }
       }
     }
     
     console.log(`✅ Found ${jobs.length} jobs`)
     
-    // If we still have no jobs, create some example high-paying positions based on known OpenAI roles
-    if (jobs.length === 0) {
-      console.log('⚠️ Unable to parse jobs from page, using known OpenAI positions...')
+    // If we still have no jobs and this is not Anthropic, use OpenAI examples
+    if (jobs.length === 0 && !isAnthropic) {
+      console.log(`⚠️ Unable to parse jobs from page, using known ${companyName} positions...`)
+      // OpenAI example positions (only for OpenAI)
       jobs.push(
         {
           title: 'Principal Engineer, GPU Platform',
@@ -631,10 +1140,28 @@ export default async function handler(
           skills: ['Deep Learning', 'NLP', 'Python', 'Research Publications']
         }
       )
+    } else if (jobs.length === 0 && isAnthropic) {
+      console.log(`❌ Unable to find any job data for ${companyName}. The page might require JavaScript or use a different loading method.`)
+      console.log(`💡 Suggestion: ${companyName} might use a different recruitment platform or require dynamic page loading.`)
     }
     
     // Sort by salary
     jobs.sort((a, b) => (b.salary_max || 0) - (a.salary_max || 0))
+    
+    // If no jobs found for Anthropic, return error
+    if (jobs.length === 0 && isAnthropic) {
+      return res.status(404).json({
+        success: false,
+        error: `No job listings found for ${companyName}`,
+        message: `Unable to scrape jobs from ${mainUrl}. The page might use dynamic loading or a third-party platform.`,
+        suggestions: [
+          'The job listings might be loaded via JavaScript',
+          'Check if Anthropic uses a third-party recruitment platform',
+          'The page might require waiting for content to load',
+          'Try checking their LinkedIn jobs or other job boards'
+        ]
+      })
+    }
     
     // Save to file
     const dataDir = path.join(process.cwd(), 'data')
@@ -643,7 +1170,8 @@ export default async function handler(
     }
     
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
-    const filename = `openai-jobs-${timestamp}.json`
+    const companySlug = companyName.toLowerCase()
+    const filename = `${companySlug}-jobs-${timestamp}.json`
     const filepath = path.join(dataDir, filename)
     
     const saveData = {
@@ -660,7 +1188,7 @@ export default async function handler(
     
     // After saving, use the SAME logic as get-summary to determine which file to actually use
     // This ensures consistency between scraping results and refresh results
-    const files = fs.readdirSync(dataDir).filter(f => f.startsWith('openai-jobs-') && f.endsWith('.json'))
+    const files = fs.readdirSync(dataDir).filter(f => f.startsWith(`${companySlug}-jobs-`) && f.endsWith('.json'))
     
     let actualDataFile
     const refinedFiles = files.filter(f => f.includes('REFINED')).sort()
@@ -710,24 +1238,38 @@ export default async function handler(
     const mlSkill = topSkills.find(s => s.skill === 'Machine Learning')
     console.log(`🔍 Machine Learning count: ${mlSkill?.count || 0}`)
     
-    res.status(200).json({
-      success: true,
-      message: `Successfully scraped ${jobs.length} jobs from OpenAI careers`,
-      filepath,
-      dataSource: actualDataFile, // Show which file was actually used for the summary
-      summary: {
-        total_jobs: actualJobs.length,
-        jobs_with_salary: actualJobs.filter((j: Job) => j.salary_min || j.salary_max).length,
-        highest_paying_jobs: highestPaying,
-        most_common_skills: topSkills
-      }
-    })
+      return res.status(200).json({
+        success: true,
+        message: `Successfully scraped ${jobs.length} jobs from ${companyName} careers`,
+        company: companyName,
+        filepath,
+        dataSource: actualDataFile, // Show which file was actually used for the summary
+        summary: {
+          total_jobs: actualJobs.length,
+          jobs_with_salary: actualJobs.filter((j: Job) => j.salary_min || j.salary_max).length,
+          highest_paying_jobs: highestPaying,
+          most_common_skills: topSkills
+        }
+      })
+    }
+
+    // Execute scraping logic with timeout handling
+    return await scrapingLogic()
 
   } catch (error) {
     console.error('Scraping error:', error)
-    res.status(500).json({ 
-      error: 'Failed to scrape jobs',
-      details: error instanceof Error ? error.message : 'Unknown error'
-    })
+    
+    if (error instanceof Error && error.message === 'Scraping timeout') {
+      res.status(408).json({ 
+        error: 'Scraping timeout',
+        message: 'The scraping process took too long. Anthropic pages might require JavaScript rendering.',
+        details: 'Try again later or use a different approach for dynamic content'
+      })
+    } else {
+      res.status(500).json({ 
+        error: 'Failed to scrape jobs',
+        details: error instanceof Error ? error.message : 'Unknown error'
+      })
+    }
   }
 }

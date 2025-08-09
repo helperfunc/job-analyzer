@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/router'
+import { formatSalary } from '../utils/formatSalary'
 
 interface Job {
   title: string
@@ -21,7 +22,7 @@ interface SkillJobsResponse {
 
 export default function SkillJobs() {
   const router = useRouter()
-  const { skill } = router.query
+  const { skill, company } = router.query
   const [jobs, setJobs] = useState<Job[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -31,14 +32,16 @@ export default function SkillJobs() {
     if (skill && typeof skill === 'string') {
       fetchJobsBySkill(skill)
     }
-  }, [skill])
+  }, [skill, company])
 
   const fetchJobsBySkill = async (skillName: string) => {
     setLoading(true)
     setError('')
 
+    const companyParam = company && typeof company === 'string' ? company : 'openai'
+
     try {
-      const response = await fetch(`/api/jobs-by-skill?skill=${encodeURIComponent(skillName)}`)
+      const response = await fetch(`/api/jobs-by-skill?skill=${encodeURIComponent(skillName)}&company=${companyParam}`)
       
       if (!response.ok) {
         throw new Error('Failed to fetch jobs')
@@ -149,10 +152,10 @@ export default function SkillJobs() {
                 </div>
                 
                 <div className="text-right ml-6">
-                  {job.salary_min && job.salary_max ? (
+                  {formatSalary(job.salary, job.salary_min, job.salary_max) ? (
                     <>
                       <p className="text-2xl font-bold text-green-600">
-                        ${job.salary_min}K - ${job.salary_max}K
+                        {formatSalary(job.salary, job.salary_min, job.salary_max)}
                       </p>
                       <p className="text-sm text-gray-500">年薪 (USD)</p>
                     </>

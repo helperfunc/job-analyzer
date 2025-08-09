@@ -22,14 +22,20 @@ export default async function handler(
   }
 
   try {
-    // Read the latest job data (same logic as jobs-by-skill)
+    // Get company parameter from query
+    const { company } = req.query
+    const companyFilter = company ? company.toString().toLowerCase() : 'openai'
+    
+    console.log(`📊 Getting summary for company: ${companyFilter}`)
+    
+    // Read the latest job data for the specified company
     const dataDir = path.join(process.cwd(), 'data')
     
     if (!fs.existsSync(dataDir)) {
       return res.status(404).json({ error: 'No job data found' })
     }
 
-    const files = fs.readdirSync(dataDir).filter(f => f.startsWith('openai-jobs-') && f.endsWith('.json'))
+    const files = fs.readdirSync(dataDir).filter(f => f.startsWith(`${companyFilter}-jobs-`) && f.endsWith('.json'))
     
     if (files.length === 0) {
       return res.status(404).json({ error: 'No job data files found' })

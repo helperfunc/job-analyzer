@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/router'
+import { formatSalary } from '../utils/formatSalary'
 
 interface JobSummary {
   title: string
+  salary?: string
   salary_min?: number
   salary_max?: number
   skills: string[]
@@ -15,6 +17,7 @@ interface JobSummary {
 interface ScrapeResult {
   success: boolean
   message: string
+  company?: string
   filepath: string
   summary: {
     total_jobs: number
@@ -44,14 +47,18 @@ export default function Home() {
     
     // Clear any old cached data first
     localStorage.removeItem('openai-jobs-analysis-result')
+    localStorage.removeItem('anthropic-jobs-analysis-result')
     
     // Always load fresh data on mount
     const loadLatestData = async () => {
       setInitialLoading(true)
       setResult(null) // Ensure no old data is shown
       
+      // Determine which company data to load based on current URL
+      const currentCompany = url.includes('anthropic.com') ? 'anthropic' : 'openai'
+      
       try {
-        const res = await fetch(`/api/get-summary?_t=${Date.now()}`, {
+        const res = await fetch(`/api/get-summary?company=${currentCompany}&_t=${Date.now()}`, {
           method: 'GET',
           cache: 'no-cache', // Prevent browser caching
           headers: {
@@ -63,12 +70,12 @@ export default function Home() {
         
         if (res.ok) {
           const data = await res.json()
-          console.log('🔍 Fresh API response - ML jobs:', data.summary?.most_common_skills?.find(s => s.skill === 'Machine Learning')?.count)
+          console.log(`🔍 Fresh API response for ${currentCompany} - ML jobs:`, data.summary?.most_common_skills?.find(s => s.skill === 'Machine Learning')?.count)
           console.log('🔍 Data source file:', data.dataSource)
           console.log('🔍 Timestamp:', data.timestamp)
           setResult(data)
           // Update localStorage with fresh data
-          localStorage.setItem('openai-jobs-analysis-result', JSON.stringify(data))
+          localStorage.setItem(`${currentCompany}-jobs-analysis-result`, JSON.stringify(data))
         } else {
           console.error('Failed to load summary:', res.status)
         }
@@ -80,7 +87,7 @@ export default function Home() {
     }
     
     loadLatestData()
-  }, [mounted])
+  }, [mounted, url]) // Add url as dependency
 
   const scrapeJobs = async () => {
     if (!url) return
@@ -119,14 +126,17 @@ export default function Home() {
     setResult(null)
     setError('')
     localStorage.removeItem('openai-jobs-analysis-result')
+    localStorage.removeItem('anthropic-jobs-analysis-result')
   }
 
   const refreshStats = async () => {
     setLoading(true)
     setError('')
     
+    const currentCompany = url.includes('anthropic.com') ? 'anthropic' : 'openai'
+    
     try {
-      const res = await fetch('/api/get-summary', {
+      const res = await fetch(`/api/get-summary?company=${currentCompany}`, {
         method: 'GET',
       })
 
@@ -137,7 +147,7 @@ export default function Home() {
       const data = await res.json()
       setResult(data)
       // Save the refreshed results
-      localStorage.setItem('openai-jobs-analysis-result', JSON.stringify(data))
+      localStorage.setItem(`${currentCompany}-jobs-analysis-result`, JSON.stringify(data))
     } catch (err) {
       setError(err instanceof Error ? err.message : '获取统计失败，请重试')
     } finally {
@@ -149,20 +159,44 @@ export default function Home() {
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-4xl mx-auto p-8">
         <h1 className="text-3xl font-bold mb-2 text-gray-900">
-          OpenAI 职位分析器
+          AI 公司职位分析器
         </h1>
         <p className="text-gray-600 mb-8">
-          快速分析OpenAI所有职位，找出薪资最高的技术岗位
+          快速分析AI公司所有职位，找出薪资最高的技术岗位，支持OpenAI和Anthropic对比
         </p>
 
         <div className="space-y-4 mb-8">
           <input
             type="url"
-            placeholder="输入OpenAI招聘页面URL"
+            placeholder="输入公司招聘页面URL (支持OpenAI/Anthropic)"
             className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
             value={url}
             onChange={(e) => setUrl(e.target.value)}
           />
+          
+          {/* Quick company selection */}
+          <div className="flex gap-2 justify-center">
+            <button
+              onClick={() => setUrl('https://openai.com/careers/search/')}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                url.includes('openai.com') 
+                  ? 'bg-blue-100 text-blue-700 border border-blue-300' 
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
+            >
+              OpenAI
+            </button>
+            <button
+              onClick={() => setUrl('https://www.anthropic.com/jobs')}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                url.includes('anthropic.com') 
+                  ? 'bg-purple-100 text-purple-700 border border-purple-300' 
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
+            >
+              Anthropic
+            </button>
+          </div>
 
           <div className="flex space-x-3">
             <button
@@ -173,12 +207,20 @@ export default function Home() {
               {loading ? '分析中...' : '快速分析职位'}
             </button>
             {result && (
-              <button
-                onClick={clearResults}
-                className="bg-gray-500 text-white px-4 py-3 rounded-lg hover:bg-gray-600 transition-colors"
-              >
-                清除结果
-              </button>
+              <>
+                <button
+                  onClick={clearResults}
+                  className="bg-gray-500 text-white px-4 py-3 rounded-lg hover:bg-gray-600 transition-colors"
+                >
+                  清除结果
+                </button>
+                <button
+                  onClick={() => router.push('/compare')}
+                  className="bg-gradient-to-r from-blue-500 to-purple-500 text-white px-4 py-3 rounded-lg hover:from-blue-600 hover:to-purple-600 transition-colors font-medium"
+                >
+                  🔥 对比分析
+                </button>
+              </>
             )}
           </div>
         </div>
@@ -204,8 +246,14 @@ export default function Home() {
             </div>
 
             {/* Summary */}
-            <div className="bg-blue-50 p-6 rounded-lg border border-blue-200">
-              <h2 className="text-xl font-bold mb-4 text-gray-900">📊 爬取总结</h2>
+            <div className={`p-6 rounded-lg border ${
+              result.company === 'OpenAI' ? 'bg-blue-50 border-blue-200' : 
+              result.company === 'Anthropic' ? 'bg-purple-50 border-purple-200' : 
+              'bg-blue-50 border-blue-200'
+            }`}>
+              <h2 className="text-xl font-bold mb-4 text-gray-900">
+                📊 {result.company || '公司'} 职位总结
+              </h2>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <p className="text-lg">
@@ -240,7 +288,8 @@ export default function Home() {
                                 className="bg-blue-100 px-2 py-1 rounded text-xs cursor-pointer hover:bg-blue-200 transition-colors"
                                 onClick={(e) => {
                                   e.stopPropagation()
-                                  router.push(`/skill-jobs?skill=${encodeURIComponent(skill)}`)
+                                  const currentCompany = url.includes('anthropic.com') ? 'anthropic' : 'openai'
+                                  router.push(`/skill-jobs?skill=${encodeURIComponent(skill)}&company=${currentCompany}`)
                                 }}
                               >
                                 {skill}
@@ -250,10 +299,10 @@ export default function Home() {
                         </div>
                       </div>
                       <div className="text-right">
-                        {job.salary_min && job.salary_max ? (
+                        {formatSalary(job.salary, job.salary_min, job.salary_max) ? (
                           <>
                             <p className="text-xl font-bold text-green-600">
-                              ${job.salary_min}k - ${job.salary_max}k
+                              {formatSalary(job.salary, job.salary_min, job.salary_max)}
                             </p>
                             <p className="text-sm text-gray-500">年薪 (USD)</p>
                           </>
@@ -282,7 +331,10 @@ export default function Home() {
                   <div 
                     key={index} 
                     className="bg-white p-3 rounded-lg border cursor-pointer hover:shadow-md hover:bg-blue-50 transition-all"
-                    onClick={() => router.push(`/skill-jobs?skill=${encodeURIComponent(skill.skill)}`)}
+                    onClick={() => {
+                      const currentCompany = url.includes('anthropic.com') ? 'anthropic' : 'openai'
+                      router.push(`/skill-jobs?skill=${encodeURIComponent(skill.skill)}&company=${currentCompany}`)
+                    }}
                   >
                     <p className="font-medium text-blue-600">{skill.skill}</p>
                     <p className="text-sm text-gray-600">{skill.count} 个职位</p>
