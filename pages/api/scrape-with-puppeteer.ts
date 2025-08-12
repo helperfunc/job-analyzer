@@ -174,20 +174,22 @@ export default async function handler(
     return res.status(405).json({ error: 'Method not allowed' })
   }
 
+  const { url } = req.body
+  let timeoutId: NodeJS.Timeout | null = null
+  
+  // Detect which company we're scraping
+  const isAnthropic = url.includes('anthropic.com') || url.includes('greenhouse.io/anthropic')
+  const isOpenAI = url.includes('openai.com')
+  
+  // Set timeout based on company - longer for Anthropic due to many pages
+  const timeout = isAnthropic ? 300000 : 120000 // 5 minutes for Anthropic, 2 minutes for others
+  
+  const timeoutPromise = new Promise((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error('Scraping timeout')), timeout)
+  })
+  
   try {
     const scrapingLogic = async () => {
-      const { url } = req.body
-      
-      // Detect which company we're scraping
-      const isAnthropic = url.includes('anthropic.com') || url.includes('greenhouse.io/anthropic')
-      const isOpenAI = url.includes('openai.com')
-      
-      // Set timeout based on company - longer for Anthropic due to many pages
-      const timeout = isAnthropic ? 300000 : 120000 // 5 minutes for Anthropic, 2 minutes for others
-      
-      const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('Scraping timeout')), timeout)
-      })
       
       const companyName = isAnthropic ? 'Anthropic' : isOpenAI ? 'OpenAI' : 'Unknown'
       console.log(`🔍 Starting ${companyName} careers scraping...`)
@@ -1238,7 +1240,10 @@ export default async function handler(
     const mlSkill = topSkills.find(s => s.skill === 'Machine Learning')
     console.log(`🔍 Machine Learning count: ${mlSkill?.count || 0}`)
     
-      return res.status(200).json({
+      // Clear the timeout before returning
+      if (timeoutId) clearTimeout(timeoutId)
+      
+      return {
         success: true,
         message: `Successfully scraped ${jobs.length} jobs from ${companyName} careers`,
         company: companyName,
@@ -1250,11 +1255,17 @@ export default async function handler(
           highest_paying_jobs: highestPaying,
           most_common_skills: topSkills
         }
-      })
+      }
     }
 
     // Execute scraping logic with timeout handling
-    return await scrapingLogic()
+    try {
+      const result = await Promise.race([scrapingLogic(), timeoutPromise])
+      res.status(200).json(result)
+    } finally {
+      // Always clear the timeout
+      if (timeoutId) clearTimeout(timeoutId)
+    }
 
   } catch (error) {
     console.error('Scraping error:', error)

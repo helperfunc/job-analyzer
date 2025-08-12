@@ -35,6 +35,64 @@ export default function Home() {
   const [result, setResult] = useState<ScrapeResult | null>(null)
   const [error, setError] = useState('')
   const [mounted, setMounted] = useState(false) // Track if component is mounted
+  const [jobIdMap, setJobIdMap] = useState<Record<string, string>>({}) // Map job keys to UUIDs
+
+  // Generate a UUID v4-like ID
+  const generateUUID = (): string => {
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+      const r = Math.random() * 16 | 0
+      const v = c === 'x' ? r : (r & 0x3 | 0x8)
+      return v.toString(16)
+    })
+  }
+
+  // Get or create a UUID for a job
+  const getJobId = (company: string, index: number): string => {
+    const key = `${company}-${index}`
+    if (!jobIdMap[key]) {
+      const newId = generateUUID()
+      setJobIdMap(prev => ({ ...prev, [key]: newId }))
+      return newId
+    }
+    return jobIdMap[key]
+  }
+
+  // Auto-import jobs to database when result is loaded
+  const autoImportJobs = async (resultData: ScrapeResult) => {
+    try {
+      console.log('🔄 Auto-importing jobs to database...')
+      
+      const currentCompany = url.includes('anthropic.com') ? 'anthropic' : 'openai'
+      const jobs = resultData.summary.highest_paying_jobs.map((job, index) => ({
+        id: getJobId(currentCompany, index),
+        title: job.title,
+        company: currentCompany.charAt(0).toUpperCase() + currentCompany.slice(1),
+        location: job.location,
+        department: job.department,
+        salary: job.salary,
+        salary_min: job.salary_min,
+        salary_max: job.salary_max,
+        skills: job.skills || [],
+        description: job.description,
+        url: job.url
+      }))
+
+      const importResponse = await fetch('/api/jobs/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jobs })
+      })
+
+      const importResult = await importResponse.json()
+      if (importResult.success) {
+        console.log(`✅ Auto-imported ${importResult.count} jobs to database`)
+      } else {
+        console.log(`⚠️ Jobs import info: ${importResult.message}`)
+      }
+    } catch (err) {
+      console.log('⚠️ Auto-import failed (non-critical):', err)
+    }
+  }
 
   // Track mounting to avoid SSR issues
   useEffect(() => {
@@ -76,6 +134,9 @@ export default function Home() {
           setResult(data)
           // Update localStorage with fresh data
           localStorage.setItem(`${currentCompany}-jobs-analysis-result`, JSON.stringify(data))
+          
+          // Auto-import jobs to database
+          autoImportJobs(data)
         } else {
           console.error('Failed to load summary:', res.status)
         }
@@ -215,6 +276,18 @@ export default function Home() {
                   清除结果
                 </button>
                 <button
+                  onClick={() => router.push('/jobs')}
+                  className="bg-green-600 text-white px-4 py-3 rounded-lg hover:bg-green-700 transition-colors font-medium"
+                >
+                  📋 Jobs
+                </button>
+                <button
+                  onClick={() => router.push('/research')}
+                  className="bg-purple-600 text-white px-4 py-3 rounded-lg hover:bg-purple-700 transition-colors font-medium"
+                >
+                  🔬 Research
+                </button>
+                <button
                   onClick={() => router.push('/compare')}
                   className="bg-gradient-to-r from-blue-500 to-purple-500 text-white px-4 py-3 rounded-lg hover:from-blue-600 hover:to-purple-600 transition-colors font-medium"
                 >
@@ -273,12 +346,39 @@ export default function Home() {
               <h2 className="text-xl font-bold mb-4 text-gray-900">💰 薪资最高的职位</h2>
               <div className="space-y-3">
                 {result.summary.highest_paying_jobs.slice(0, 10).map((job, index) => (
-                  <div key={index} className="bg-white p-4 rounded-lg border hover:shadow-md transition-shadow cursor-pointer"
-                       onClick={() => window.open(job.url, '_blank')}>
+                  <div key={index} className="bg-white p-4 rounded-lg border hover:shadow-md transition-shadow">
                     <div className="flex justify-between items-start">
                       <div className="flex-1">
-                        <h3 className="font-semibold text-lg text-blue-600 hover:text-blue-800">{job.title}</h3>
+                        <h3 className="font-semibold text-lg text-blue-600 hover:text-blue-800 cursor-pointer"
+                             onClick={() => {
+                               const currentCompany = url.includes('anthropic.com') ? 'anthropic' : 'openai'
+                               const jobId = getJobId(currentCompany, index)
+                               router.push(`/job/${jobId}?company=${currentCompany}&index=${index}`)
+                             }}>{job.title}</h3>
                         <p className="text-gray-600">{job.location} • {job.department}</p>
+                        <div className="mt-2 flex gap-2">
+                          <button
+                            onClick={() => {
+                              const currentCompany = url.includes('anthropic.com') ? 'anthropic' : 'openai'
+                              const jobId = getJobId(currentCompany, index)
+                              router.push(`/job/${jobId}?company=${currentCompany}&index=${index}`)
+                            }}
+                            className="text-xs bg-blue-100 hover:bg-blue-200 text-blue-700 px-2 py-1 rounded"
+                          >
+                            View Details
+                          </button>
+                          {job.url && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                window.open(job.url, '_blank')
+                              }}
+                              className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 px-2 py-1 rounded"
+                            >
+                              Original Post →
+                            </button>
+                          )}
+                        </div>
                         <div className="mt-2">
                           <p className="text-sm font-medium text-gray-700">核心技能:</p>
                           <div className="flex flex-wrap gap-1 mt-1">

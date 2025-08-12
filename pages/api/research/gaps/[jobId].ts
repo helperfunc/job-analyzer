@@ -1,0 +1,73 @@
+import { NextApiRequest, NextApiResponse } from 'next'
+import { supabase } from '../../../../lib/supabase'
+import { mockGapAnalysis } from '../../../../data/mock-research-data'
+
+export default async function handler(
+  req: NextApiRequest,
+  res: NextApiResponse
+) {
+  const { jobId } = req.query
+
+  if (!jobId || typeof jobId !== 'string') {
+    return res.status(400).json({
+      success: false,
+      error: 'Job ID is required'
+    })
+  }
+
+  if (req.method === 'GET') {
+    try {
+      const { user_id } = req.query
+
+      if (!user_id) {
+        return res.status(400).json({
+          success: false,
+          error: 'User ID is required'
+        })
+      }
+
+      // If database is not configured, return mock data
+      if (!supabase) {
+        if (jobId === mockGapAnalysis.job_id && user_id === mockGapAnalysis.user_id) {
+          return res.status(200).json({
+            success: true,
+            data: mockGapAnalysis
+          })
+        }
+        return res.status(200).json({
+          success: true,
+          data: null
+        })
+      }
+
+      // 获取技能差距分析及相关项目推荐
+      const { data, error } = await supabase
+        .from('skill_gaps')
+        .select(`
+          *,
+          project_recommendations(*)
+        `)
+        .eq('job_id', jobId)
+        .eq('user_id', user_id)
+        .single()
+
+      if (error && error.code !== 'PGRST116') throw error // PGRST116 = no rows returned
+
+      res.status(200).json({
+        success: true,
+        data: data || null
+      })
+    } catch (error) {
+      console.error('Error fetching skill gap analysis:', error)
+      res.status(500).json({
+        success: false,
+        error: 'Failed to fetch skill gap analysis'
+      })
+    }
+  } else {
+    res.status(405).json({
+      success: false,
+      error: 'Method not allowed'
+    })
+  }
+}
