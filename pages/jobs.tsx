@@ -74,6 +74,20 @@ export default function JobsPage() {
   })
   const [linkedPapers, setLinkedPapers] = useState<Paper[]>([])
   const [modalTab, setModalTab] = useState<'link' | 'linked'>('link')
+  const [showCreateJobModal, setShowCreateJobModal] = useState(false)
+  const [newJob, setNewJob] = useState({
+    title: '',
+    company: '',
+    location: '',
+    department: '',
+    salary: '',
+    salary_min: 0,
+    salary_max: 0,
+    skills: [] as string[],
+    description: '',
+    url: ''
+  })
+  const [scrapingJob, setScrapingJob] = useState(false)
 
   // Generate a UUID v4-like ID
   const generateUUID = (): string => {
@@ -287,6 +301,94 @@ export default function JobsPage() {
     }
   }
 
+  const scrapeJobContent = async () => {
+    if (!newJob.url.trim()) {
+      showToastMessage('❌ Please provide a URL to scrape content from')
+      return
+    }
+
+    setScrapingJob(true)
+    try {
+      const response = await fetch('/api/jobs/scrape-content', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: newJob.url })
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        // Update the form with scraped data, keeping existing values if scraping didn't find anything
+        setNewJob(prev => ({
+          ...prev,
+          title: data.data.title || prev.title,
+          company: data.data.company || prev.company,
+          location: data.data.location || prev.location,
+          salary: data.data.salary || prev.salary,
+          description: data.data.description || prev.description,
+          skills: data.data.skills.length > 0 ? data.data.skills : prev.skills
+        }))
+        showToastMessage('✅ Job content scraped successfully!')
+      } else {
+        showToastMessage('❌ Failed to scrape job content')
+      }
+    } catch (error) {
+      console.error('Error scraping job content:', error)
+      showToastMessage('❌ Network error while scraping')
+    } finally {
+      setScrapingJob(false)
+    }
+  }
+
+  const createJob = async () => {
+    if (!newJob.title.trim() || !newJob.company.trim()) {
+      showToastMessage('❌ Title and company are required')
+      return
+    }
+
+    try {
+      const jobData = {
+        ...newJob,
+        id: generateUUID(),
+        skills: newJob.skills.filter(skill => skill.trim()),
+        created_at: new Date().toISOString()
+      }
+
+      const response = await fetch('/api/jobs/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jobs: [jobData] })
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        // Add the new job to the list
+        setJobs(prev => [jobData, ...prev])
+        showToastMessage(`✅ Job "${jobData.title}" created successfully!`)
+        setShowCreateJobModal(false)
+        setNewJob({
+          title: '',
+          company: '',
+          location: '',
+          department: '',
+          salary: '',
+          salary_min: 0,
+          salary_max: 0,
+          skills: [],
+          description: '',
+          url: ''
+        })
+      } else {
+        console.error('Failed to create job:', data.error)
+        showToastMessage(`❌ Failed to create job`)
+      }
+    } catch (err) {
+      console.error('Failed to create job:', err)
+      showToastMessage(`❌ Network error occurred`)
+    }
+  }
+
   const addInterviewResource = async () => {
     if (!selectedJob || !newResource.title.trim()) return
 
@@ -382,6 +484,12 @@ export default function JobsPage() {
         <div className="flex justify-between items-center mb-8">
           <h1 className="text-3xl font-bold">Jobs Dashboard</h1>
           <div className="flex gap-2">
+            <button
+              onClick={() => setShowCreateJobModal(true)}
+              className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700"
+            >
+              + Create Job
+            </button>
             <button
               onClick={() => router.push('/research')}
               className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
@@ -985,6 +1093,193 @@ export default function JobsPage() {
                         resource_type: 'note',
                         content: '',
                         tags: []
+                      })
+                    }}
+                    className="flex-1 bg-gray-200 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-300"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Create Job Modal */}
+        {showCreateJobModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <div className="bg-white rounded-lg max-w-2xl w-full p-6 max-h-[90vh] overflow-y-auto">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-semibold">Create New Job</h3>
+                <button
+                  onClick={() => {
+                    setShowCreateJobModal(false)
+                    setNewJob({
+                      title: '',
+                      company: '',
+                      location: '',
+                      department: '',
+                      salary: '',
+                      salary_min: 0,
+                      salary_max: 0,
+                      skills: [],
+                      description: '',
+                      url: ''
+                    })
+                  }}
+                  className="text-gray-500 hover:text-gray-700"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                {/* URL Input with Auto-Fill - Optional */}
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Job URL (Optional - We can auto-fill details for you!)
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="url"
+                      value={newJob.url}
+                      onChange={(e) => setNewJob({...newJob, url: e.target.value})}
+                      placeholder="https://careers.company.com/job-posting"
+                      className="flex-1 px-3 py-2 border border-blue-300 rounded focus:ring-2 focus:ring-blue-500 bg-white"
+                    />
+                    <button
+                      type="button"
+                      onClick={scrapeJobContent}
+                      disabled={!newJob.url.trim() || scrapingJob}
+                      className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+                    >
+                      {scrapingJob ? '🔄 Fetching...' : '🔍 Auto-Fill'}
+                    </button>
+                  </div>
+                  <p className="text-xs text-blue-600 mt-2">
+                    💡 <strong>Tip:</strong> Paste a job posting URL and click "Auto-Fill" to automatically populate all fields below!
+                  </p>
+                </div>
+
+                {/* Job Details Fields */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Job Title *</label>
+                    <input
+                      type="text"
+                      value={newJob.title}
+                      onChange={(e) => setNewJob({...newJob, title: e.target.value})}
+                      placeholder="e.g. Software Engineer"
+                      className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Company *</label>
+                    <input
+                      type="text"
+                      value={newJob.company}
+                      onChange={(e) => setNewJob({...newJob, company: e.target.value})}
+                      placeholder="e.g. OpenAI, Anthropic, Meta"
+                      className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Location</label>
+                    <input
+                      type="text"
+                      value={newJob.location}
+                      onChange={(e) => setNewJob({...newJob, location: e.target.value})}
+                      placeholder="e.g. San Francisco, Remote"
+                      className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Department</label>
+                    <input
+                      type="text"
+                      value={newJob.department}
+                      onChange={(e) => setNewJob({...newJob, department: e.target.value})}
+                      placeholder="e.g. Engineering, Research"
+                      className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Salary Range</label>
+                  <div className="grid grid-cols-3 gap-4">
+                    <input
+                      type="text"
+                      value={newJob.salary}
+                      onChange={(e) => setNewJob({...newJob, salary: e.target.value})}
+                      placeholder="e.g. $150K - $250K"
+                      className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-blue-500"
+                    />
+                    <input
+                      type="number"
+                      value={newJob.salary_min || ''}
+                      onChange={(e) => setNewJob({...newJob, salary_min: parseInt(e.target.value) || 0})}
+                      placeholder="Min ($)"
+                      className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-blue-500"
+                    />
+                    <input
+                      type="number"
+                      value={newJob.salary_max || ''}
+                      onChange={(e) => setNewJob({...newJob, salary_max: parseInt(e.target.value) || 0})}
+                      placeholder="Max ($)"
+                      className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Skills (comma-separated)</label>
+                  <input
+                    type="text"
+                    value={newJob.skills.join(', ')}
+                    onChange={(e) => setNewJob({...newJob, skills: e.target.value.split(',').map(s => s.trim()).filter(Boolean)})}
+                    placeholder="e.g. Python, Machine Learning, React"
+                    className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Job Description</label>
+                  <textarea
+                    value={newJob.description}
+                    onChange={(e) => setNewJob({...newJob, description: e.target.value})}
+                    placeholder="Job description and requirements..."
+                    className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-blue-500"
+                    rows={4}
+                  />
+                </div>
+
+
+                <div className="flex gap-3 pt-4">
+                  <button
+                    onClick={createJob}
+                    className="flex-1 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700"
+                    disabled={!newJob.title.trim() || !newJob.company.trim()}
+                  >
+                    Create Job
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowCreateJobModal(false)
+                      setNewJob({
+                        title: '',
+                        company: '',
+                        location: '',
+                        department: '',
+                        salary: '',
+                        salary_min: 0,
+                        salary_max: 0,
+                        skills: [],
+                        description: '',
+                        url: ''
                       })
                     }}
                     className="flex-1 bg-gray-200 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-300"

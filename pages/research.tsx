@@ -571,6 +571,7 @@ export default function Research() {
                 onClearAllPapers={() => clearAllPapers()}
                 onRefreshPapers={fetchAllPapers}
                 onShowToast={showToastMessage}
+                onAddPaper={(paper) => setPapers(prev => [paper, ...prev])}
               />
             )}
             
@@ -609,7 +610,7 @@ export default function Research() {
 }
 
 // Papers Tab Component
-function PapersTab({ papers, jobId, onScrapePapers, scraping, onRelatePaper, onUnrelatePaper, jobs, onDeletePaper, onClearAllPapers, onRefreshPapers, onShowToast }: { 
+function PapersTab({ papers, jobId, onScrapePapers, scraping, onRelatePaper, onUnrelatePaper, jobs, onDeletePaper, onClearAllPapers, onRefreshPapers, onShowToast, onAddPaper }: { 
   papers: Paper[], 
   jobId?: string,
   onScrapePapers: (company: 'openai' | 'anthropic') => void,
@@ -620,7 +621,8 @@ function PapersTab({ papers, jobId, onScrapePapers, scraping, onRelatePaper, onU
   onDeletePaper?: (paperId: string) => void,
   onClearAllPapers?: () => void,
   onRefreshPapers?: () => void,
-  onShowToast?: (message: string) => void
+  onShowToast?: (message: string) => void,
+  onAddPaper?: (paper: Paper) => void
 }) {
   const router = useRouter()
   const [showJobModal, setShowJobModal] = useState(false)
@@ -637,6 +639,184 @@ function PapersTab({ papers, jobId, onScrapePapers, scraping, onRelatePaper, onU
     search: '',
     company: 'all'
   })
+  const [showCreatePaperModal, setShowCreatePaperModal] = useState(false)
+  const [newPaper, setNewPaper] = useState({
+    title: '',
+    authors: [] as string[],
+    publication_date: '',
+    abstract: '',
+    url: '',
+    arxiv_id: '',
+    github_url: '',
+    company: '',
+    tags: [] as string[]
+  })
+  
+  // Paper insights state
+  const [showInsightsModal, setShowInsightsModal] = useState(false)
+  const [selectedPaperForInsights, setSelectedPaperForInsights] = useState<Paper | null>(null)
+  const [paperInsights, setPaperInsights] = useState<{[key: string]: any[]}>({})
+  const [newInsight, setNewInsight] = useState({
+    insight: '',
+    insight_type: 'note'
+  })
+
+  // Generate a UUID v4-like ID
+  const generateUUID = (): string => {
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+      const r = Math.random() * 16 | 0
+      const v = c === 'x' ? r : (r & 0x3 | 0x8)
+      return v.toString(16)
+    })
+  }
+
+  const createPaper = async () => {
+    if (!newPaper.title.trim() || !newPaper.abstract.trim() || !newPaper.url.trim()) {
+      onShowToast?.('❌ Title, abstract, and URL are required')
+      return
+    }
+
+    try {
+      const paperData = {
+        ...newPaper,
+        id: generateUUID(),
+        authors: newPaper.authors.filter(author => author.trim()),
+        tags: newPaper.tags.filter(tag => tag.trim()),
+        publication_date: newPaper.publication_date || new Date().toISOString().split('T')[0]
+      }
+
+      const response = await fetch('/api/research/papers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(paperData)
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        onShowToast?.(`✅ Paper "${paperData.title}" created successfully!`)
+        setShowCreatePaperModal(false)
+        setNewPaper({
+          title: '',
+          authors: [],
+          publication_date: '',
+          abstract: '',
+          url: '',
+          arxiv_id: '',
+          github_url: '',
+          company: '',
+          tags: []
+        })
+        
+        // Add the new paper to the local state for immediate display
+        if (onAddPaper) {
+          onAddPaper(data.data)
+        } else {
+          onRefreshPapers?.()
+        }
+      } else {
+        console.error('Failed to create paper:', data.error)
+        onShowToast?.(`❌ Failed to create paper`)
+      }
+    } catch (err) {
+      console.error('Failed to create paper:', err)
+      onShowToast?.(`❌ Network error occurred`)
+    }
+  }
+
+  // Fetch insights for a specific paper
+  const fetchPaperInsights = async (paperId: string) => {
+    try {
+      const response = await fetch(`/api/paper-insights?paper_id=${paperId}&user_id=default-user`)
+      const data = await response.json()
+      
+      if (data.success) {
+        setPaperInsights(prev => ({
+          ...prev,
+          [paperId]: data.data
+        }))
+      }
+    } catch (error) {
+      console.error('Error fetching paper insights:', error)
+    }
+  }
+
+  // Create a new insight for a paper
+  const createPaperInsight = async () => {
+    if (!selectedPaperForInsights || !newInsight.insight.trim()) {
+      onShowToast?.('❌ Insight content is required')
+      return
+    }
+
+    try {
+      const response = await fetch('/api/paper-insights', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          paper_id: selectedPaperForInsights.id,
+          user_id: 'default-user',
+          insight: newInsight.insight,
+          insight_type: newInsight.insight_type
+        })
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        onShowToast?.('✅ Insight added successfully!')
+        setNewInsight({ insight: '', insight_type: 'note' })
+        
+        // Update local state
+        setPaperInsights(prev => ({
+          ...prev,
+          [selectedPaperForInsights.id]: [
+            data.data,
+            ...(prev[selectedPaperForInsights.id] || [])
+          ]
+        }))
+      } else {
+        onShowToast?.('❌ Failed to add insight')
+      }
+    } catch (error) {
+      console.error('Error creating insight:', error)
+      onShowToast?.('❌ Network error occurred')
+    }
+  }
+
+  // Delete an insight
+  const deletePaperInsight = async (insightId: string, paperId: string) => {
+    if (!confirm('Are you sure you want to delete this insight?')) return
+
+    try {
+      const response = await fetch(`/api/paper-insights/${insightId}`, {
+        method: 'DELETE'
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        onShowToast?.('✅ Insight deleted successfully!')
+        
+        // Update local state
+        setPaperInsights(prev => ({
+          ...prev,
+          [paperId]: (prev[paperId] || []).filter(insight => insight.id !== insightId)
+        }))
+      } else {
+        onShowToast?.('❌ Failed to delete insight')
+      }
+    } catch (error) {
+      console.error('Error deleting insight:', error)
+      onShowToast?.('❌ Network error occurred')
+    }
+  }
+
+  // Load insights when opening the modal
+  const openInsightsModal = (paper: Paper) => {
+    setSelectedPaperForInsights(paper)
+    setShowInsightsModal(true)
+    fetchPaperInsights(paper.id)
+  }
 
   // Filter papers based on current filter settings
   const filteredPapers = papers.filter(paper => {
@@ -695,6 +875,12 @@ function PapersTab({ papers, jobId, onScrapePapers, scraping, onRelatePaper, onU
       <div className="mb-6 space-y-4">
         {/* Scrape buttons */}
         <div className="flex gap-4">
+          <button
+            onClick={() => setShowCreatePaperModal(true)}
+            className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700"
+          >
+            + Create Paper
+          </button>
           <button
             onClick={() => onScrapePapers('openai')}
             disabled={scraping}
@@ -860,6 +1046,12 @@ function PapersTab({ papers, jobId, onScrapePapers, scraping, onRelatePaper, onU
                   )}
                 </div>
                 <div className="flex gap-2">
+                  <button
+                    onClick={() => openInsightsModal(paper)}
+                    className="text-sm bg-purple-100 hover:bg-purple-200 text-purple-700 px-3 py-1 rounded"
+                  >
+                    Add Insights ({paperInsights[paper.id]?.length || 0})
+                  </button>
                   <button
                     onClick={() => {
                       setSelectedPaper(paper)
@@ -1133,6 +1325,273 @@ function PapersTab({ papers, jobId, onScrapePapers, scraping, onRelatePaper, onU
               >
                 Done
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Create Paper Modal */}
+      {showCreatePaperModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg max-w-2xl w-full p-6 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-semibold">Create New Paper</h3>
+              <button
+                onClick={() => {
+                  setShowCreatePaperModal(false)
+                  setNewPaper({
+                    title: '',
+                    authors: [],
+                    publication_date: '',
+                    abstract: '',
+                    url: '',
+                    arxiv_id: '',
+                    github_url: '',
+                    company: '',
+                    tags: []
+                  })
+                }}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Paper Title *</label>
+                <input
+                  type="text"
+                  value={newPaper.title}
+                  onChange={(e) => setNewPaper({...newPaper, title: e.target.value})}
+                  placeholder="e.g. Attention Is All You Need"
+                  className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Authors (comma-separated)</label>
+                <input
+                  type="text"
+                  value={newPaper.authors.join(', ')}
+                  onChange={(e) => setNewPaper({...newPaper, authors: e.target.value.split(',').map(s => s.trim()).filter(Boolean)})}
+                  placeholder="e.g. John Doe, Jane Smith"
+                  className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Company *</label>
+                  <input
+                    type="text"
+                    value={newPaper.company}
+                    onChange={(e) => setNewPaper({...newPaper, company: e.target.value})}
+                    placeholder="e.g. OpenAI, Anthropic, Google"
+                    className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Publication Date</label>
+                  <input
+                    type="date"
+                    value={newPaper.publication_date}
+                    onChange={(e) => setNewPaper({...newPaper, publication_date: e.target.value})}
+                    className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Paper URL *</label>
+                <input
+                  type="url"
+                  value={newPaper.url}
+                  onChange={(e) => setNewPaper({...newPaper, url: e.target.value})}
+                  placeholder="https://..."
+                  className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">arXiv ID</label>
+                  <input
+                    type="text"
+                    value={newPaper.arxiv_id}
+                    onChange={(e) => setNewPaper({...newPaper, arxiv_id: e.target.value})}
+                    placeholder="e.g. 1706.03762"
+                    className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">GitHub URL</label>
+                  <input
+                    type="url"
+                    value={newPaper.github_url}
+                    onChange={(e) => setNewPaper({...newPaper, github_url: e.target.value})}
+                    placeholder="https://github.com/..."
+                    className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Abstract *</label>
+                <textarea
+                  value={newPaper.abstract}
+                  onChange={(e) => setNewPaper({...newPaper, abstract: e.target.value})}
+                  placeholder="Paper abstract and summary..."
+                  className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-blue-500"
+                  rows={4}
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Tags (comma-separated)</label>
+                <input
+                  type="text"
+                  value={newPaper.tags.join(', ')}
+                  onChange={(e) => setNewPaper({...newPaper, tags: e.target.value.split(',').map(s => s.trim()).filter(Boolean)})}
+                  placeholder="e.g. machine learning, transformer, attention"
+                  className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div className="flex gap-3 pt-4">
+                <button
+                  onClick={createPaper}
+                  className="flex-1 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700"
+                  disabled={!newPaper.title.trim() || !newPaper.abstract.trim() || !newPaper.url.trim()}
+                >
+                  Create Paper
+                </button>
+                <button
+                  onClick={() => {
+                    setShowCreatePaperModal(false)
+                    setNewPaper({
+                      title: '',
+                      authors: [],
+                      publication_date: '',
+                      abstract: '',
+                      url: '',
+                      arxiv_id: '',
+                      github_url: '',
+                      company: '',
+                      tags: []
+                    })
+                  }}
+                  className="flex-1 bg-gray-200 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-300"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Paper Insights Modal */}
+      {showInsightsModal && selectedPaperForInsights && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg max-w-4xl w-full max-h-[85vh] overflow-hidden">
+            <div className="p-6">
+              <div className="flex justify-between items-center mb-4">
+                <div>
+                  <h3 className="text-lg font-semibold">Personal Insights</h3>
+                  <p className="text-sm text-gray-600 mt-1">
+                    "{selectedPaperForInsights.title}"
+                  </p>
+                </div>
+                <button
+                  onClick={() => {
+                    setShowInsightsModal(false)
+                    setSelectedPaperForInsights(null)
+                    setNewInsight({ insight: '', insight_type: 'note' })
+                  }}
+                  className="text-gray-500 hover:text-gray-700"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* Add New Insight Form */}
+              <div className="bg-gray-50 p-4 rounded-lg mb-4">
+                <h4 className="text-md font-semibold mb-3">Add New Insight</h4>
+                <div className="grid gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Insight Type</label>
+                    <select
+                      value={newInsight.insight_type}
+                      onChange={(e) => setNewInsight({...newInsight, insight_type: e.target.value})}
+                      className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-purple-500"
+                    >
+                      <option value="note">Personal Note</option>
+                      <option value="analysis">Analysis</option>
+                      <option value="relevance">Relevance to Career</option>
+                      <option value="application">Practical Application</option>
+                      <option value="other">Other</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Your Insight</label>
+                    <textarea
+                      value={newInsight.insight}
+                      onChange={(e) => setNewInsight({...newInsight, insight: e.target.value})}
+                      placeholder="Share your thoughts about this paper..."
+                      className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-purple-500"
+                      rows={3}
+                    />
+                  </div>
+                  <button
+                    onClick={createPaperInsight}
+                    disabled={!newInsight.insight.trim()}
+                    className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 disabled:opacity-50"
+                  >
+                    Add Insight
+                  </button>
+                </div>
+              </div>
+
+              {/* Existing Insights */}
+              <div className="max-h-96 overflow-y-auto">
+                <h4 className="text-md font-semibold mb-3">Your Insights ({paperInsights[selectedPaperForInsights.id]?.length || 0})</h4>
+                {paperInsights[selectedPaperForInsights.id]?.length === 0 || !paperInsights[selectedPaperForInsights.id] ? (
+                  <div className="text-center py-8 text-gray-500">
+                    <p>No insights yet. Add your first insight above!</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {paperInsights[selectedPaperForInsights.id]?.map((insight: any) => (
+                      <div key={insight.id} className="bg-white border rounded-lg p-4">
+                        <div className="flex justify-between items-start mb-2">
+                          <span className={`px-2 py-1 text-xs rounded-full ${{
+                            'note': 'bg-blue-100 text-blue-700',
+                            'analysis': 'bg-green-100 text-green-700',
+                            'relevance': 'bg-yellow-100 text-yellow-700',
+                            'application': 'bg-purple-100 text-purple-700',
+                            'other': 'bg-gray-100 text-gray-700'
+                          }[insight.insight_type] || 'bg-gray-100 text-gray-700'}`}>
+                            {insight.insight_type}
+                          </span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-gray-500">
+                              {new Date(insight.created_at).toLocaleDateString()}
+                            </span>
+                            <button
+                              onClick={() => deletePaperInsight(insight.id, selectedPaperForInsights.id)}
+                              className="text-red-500 hover:text-red-700 text-sm"
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        </div>
+                        <p className="text-gray-700">{insight.insight}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
