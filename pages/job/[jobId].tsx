@@ -51,6 +51,20 @@ export default function JobDetail() {
   const [activeTab, setActiveTab] = useState<'info' | 'papers' | 'resources'>('info')
   const [toastMessage, setToastMessage] = useState('')
   const [showToast, setShowToast] = useState(false)
+  const [allPapers, setAllPapers] = useState<Paper[]>([])
+  const [showAddPaperModal, setShowAddPaperModal] = useState(false)
+  const [showAddResourceModal, setShowAddResourceModal] = useState(false)
+  const [newResource, setNewResource] = useState({
+    title: '',
+    url: '',
+    resource_type: 'note' as 'preparation' | 'question' | 'experience' | 'note' | 'other',
+    content: '',
+    tags: [] as string[]
+  })
+  const [paperSearchFilter, setPaperSearchFilter] = useState({
+    search: '',
+    company: 'all'
+  })
 
   // Show toast notification
   const showToastMessage = (message: string) => {
@@ -66,6 +80,7 @@ export default function JobDetail() {
     fetchJobDetails()
     fetchRelatedPapers()
     fetchInterviewResources()
+    fetchAllPapers()
   }, [jobId])
 
   const fetchJobDetails = async () => {
@@ -127,12 +142,25 @@ export default function JobDetail() {
   const fetchInterviewResources = async () => {
     if (!jobId) return
     try {
-      // Get from localStorage for now
-      const allResources = JSON.parse(localStorage.getItem('interview_resources') || '[]')
-      const jobResources = allResources.filter((resource: InterviewResource) => resource.job_id === jobId)
-      setInterviewResources(jobResources)
+      const response = await fetch(`/api/interview-resources?job_id=${jobId}`)
+      const data = await response.json()
+      if (data.success) {
+        setInterviewResources(data.data)
+      }
     } catch (err) {
       console.error('Failed to fetch interview resources:', err)
+    }
+  }
+
+  const fetchAllPapers = async () => {
+    try {
+      const response = await fetch('/api/research/papers?limit=500')
+      const data = await response.json()
+      if (data.success) {
+        setAllPapers(data.data)
+      }
+    } catch (err) {
+      console.error('Failed to fetch papers:', err)
     }
   }
 
@@ -161,17 +189,93 @@ export default function JobDetail() {
     }
   }
 
-  const removeInterviewResource = (resourceId: string) => {
+  const removeInterviewResource = async (resourceId: string) => {
     try {
-      const allResources = JSON.parse(localStorage.getItem('interview_resources') || '[]')
-      const updatedResources = allResources.filter((resource: InterviewResource) => resource.id !== resourceId)
-      localStorage.setItem('interview_resources', JSON.stringify(updatedResources))
+      const response = await fetch(`/api/interview-resources/${resourceId}`, {
+        method: 'DELETE'
+      })
+      const data = await response.json()
       
-      setInterviewResources(prev => prev.filter(resource => resource.id !== resourceId))
-      showToastMessage('🗑️ Interview resource removed')
+      if (data.success) {
+        setInterviewResources(prev => prev.filter(resource => resource.id !== resourceId))
+        showToastMessage('🗑️ Interview resource removed')
+      } else {
+        console.error('Failed to remove resource:', data.error)
+        showToastMessage('❌ Failed to remove resource')
+      }
     } catch (err) {
       console.error('Failed to remove interview resource:', err)
-      showToastMessage('❌ Failed to remove resource')
+      showToastMessage('❌ Network error')
+    }
+  }
+
+  const addPaperToJob = async (paperId: string) => {
+    try {
+      const response = await fetch('/api/research/relate-paper', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          paper_id: paperId,
+          job_id: jobId,
+          relevance_score: 0.8,
+          relevance_reason: 'Manually linked from job detail page'
+        })
+      })
+      const data = await response.json()
+      
+      if (data.success) {
+        const linkedPaper = allPapers.find(p => p.id === paperId)
+        if (linkedPaper) {
+          setRelatedPapers(prev => [...prev, linkedPaper])
+          showToastMessage(`✅ Paper "${linkedPaper.title}" linked to job`)
+        }
+      } else {
+        console.error('Failed to link paper:', data.error)
+        showToastMessage('❌ Failed to link paper')
+      }
+    } catch (err) {
+      console.error('Failed to link paper to job:', err)
+      showToastMessage('❌ Network error')
+    }
+  }
+
+  const addInterviewResource = async () => {
+    if (!jobId || !newResource.title.trim() || !newResource.content.trim()) return
+
+    try {
+      const response = await fetch('/api/interview-resources', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          job_id: jobId,
+          title: newResource.title,
+          url: newResource.url || null,
+          resource_type: newResource.resource_type,
+          content: newResource.content,
+          tags: newResource.tags
+        })
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        setInterviewResources(prev => [...prev, data.data])
+        showToastMessage(`✅ Interview resource "${data.data.title}" added successfully!`)
+        setShowAddResourceModal(false)
+        setNewResource({
+          title: '',
+          url: '',
+          resource_type: 'note',
+          content: '',
+          tags: []
+        })
+      } else {
+        console.error('Failed to add resource:', data.error)
+        showToastMessage(`❌ Failed to add interview resource`)
+      }
+    } catch (err) {
+      console.error('Failed to add interview resource:', err)
+      showToastMessage(`❌ Network error occurred`)
     }
   }
 
@@ -333,14 +437,23 @@ export default function JobDetail() {
         {/* Related Papers Tab */}
         {activeTab === 'papers' && (
           <div className="space-y-4">
+            <div className="flex justify-between items-center">
+              <h3 className="text-lg font-medium">Related Papers ({relatedPapers.length})</h3>
+              <button
+                onClick={() => setShowAddPaperModal(true)}
+                className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+              >
+                + Add Paper
+              </button>
+            </div>
             {relatedPapers.length === 0 ? (
               <div className="bg-white rounded-lg shadow-sm border p-8 text-center">
                 <p className="text-gray-500 mb-4">No papers linked to this job yet</p>
                 <button
-                  onClick={() => router.push('/research')}
+                  onClick={() => setShowAddPaperModal(true)}
                   className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
                 >
-                  Link Papers from Research Page
+                  Add First Paper
                 </button>
               </div>
             ) : (
@@ -417,14 +530,23 @@ export default function JobDetail() {
         {/* Interview Resources Tab */}
         {activeTab === 'resources' && (
           <div className="space-y-4">
+            <div className="flex justify-between items-center">
+              <h3 className="text-lg font-medium">Interview Resources ({interviewResources.length})</h3>
+              <button
+                onClick={() => setShowAddResourceModal(true)}
+                className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
+              >
+                + Add Resource
+              </button>
+            </div>
             {interviewResources.length === 0 ? (
               <div className="bg-white rounded-lg shadow-sm border p-8 text-center">
                 <p className="text-gray-500 mb-4">No interview resources added yet</p>
                 <button
-                  onClick={() => router.push('/jobs')}
+                  onClick={() => setShowAddResourceModal(true)}
                   className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
                 >
-                  Add Resources from Jobs Page
+                  Add First Resource
                 </button>
               </div>
             ) : (
@@ -476,6 +598,264 @@ export default function JobDetail() {
                 </div>
               ))
             )}
+          </div>
+        )}
+
+        {/* Add Paper Modal */}
+        {showAddPaperModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <div className="bg-white rounded-lg max-w-4xl w-full max-h-[85vh] overflow-hidden p-6">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-semibold">Add Paper to Job</h3>
+                <button
+                  onClick={() => {
+                    setShowAddPaperModal(false)
+                    setPaperSearchFilter({ search: '', company: 'all' })
+                  }}
+                  className="text-gray-500 hover:text-gray-700"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* Search and Filter Controls */}
+              <div className="bg-gray-50 p-4 rounded-lg mb-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Search Papers</label>
+                    <input
+                      type="text"
+                      placeholder="Search by title, authors, or abstract..."
+                      value={paperSearchFilter.search}
+                      onChange={(e) => setPaperSearchFilter({...paperSearchFilter, search: e.target.value})}
+                      className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Company</label>
+                    <select
+                      value={paperSearchFilter.company}
+                      onChange={(e) => setPaperSearchFilter({...paperSearchFilter, company: e.target.value})}
+                      className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="all">All Companies</option>
+                      <option value="OpenAI">OpenAI</option>
+                      <option value="Anthropic">Anthropic</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* Papers List */}
+              <div className="overflow-y-auto max-h-[50vh]">
+                <div className="grid gap-3">
+                  {allPapers.filter(paper => {
+                    // Filter out papers that are already linked to this job
+                    if (relatedPapers.some(linkedPaper => linkedPaper.id === paper.id)) {
+                      return false
+                    }
+                    
+                    // Apply search filter
+                    if (paperSearchFilter.search) {
+                      const searchLower = paperSearchFilter.search.toLowerCase()
+                      const matchesSearch = 
+                        paper.title.toLowerCase().includes(searchLower) ||
+                        paper.abstract?.toLowerCase().includes(searchLower) ||
+                        paper.authors.some(author => author.toLowerCase().includes(searchLower))
+                      if (!matchesSearch) return false
+                    }
+                    
+                    // Apply company filter
+                    if (paperSearchFilter.company !== 'all' && paper.company !== paperSearchFilter.company) {
+                      return false
+                    }
+                    
+                    return true
+                  }).map(paper => (
+                    <div
+                      key={paper.id}
+                      className="border rounded-lg p-4 hover:bg-gray-50 transition-colors"
+                    >
+                      <div className="flex justify-between items-start mb-2">
+                        <div className="flex-1">
+                          <h4 className="font-medium text-gray-900">{paper.title}</h4>
+                          <p className="text-sm text-gray-600 mt-1">
+                            {paper.authors.slice(0, 3).join(', ')}
+                            {paper.authors.length > 3 && ` +${paper.authors.length - 3} more`}
+                          </p>
+                          <p className="text-xs text-gray-500">
+                            {paper.company} • {paper.publication_date ? new Date(paper.publication_date).getFullYear() : 'N/A'}
+                          </p>
+                        </div>
+                        <div className="flex gap-2 items-center">
+                          <span className={`px-2 py-1 text-xs rounded-full ${
+                            paper.company === 'OpenAI' ? 'bg-blue-100 text-blue-700' :
+                            paper.company === 'Anthropic' ? 'bg-purple-100 text-purple-700' :
+                            'bg-gray-100 text-gray-700'
+                          }`}>
+                            {paper.company}
+                          </span>
+                          <button
+                            onClick={() => addPaperToJob(paper.id)}
+                            className="text-sm bg-blue-100 hover:bg-blue-200 text-blue-700 px-3 py-1 rounded"
+                          >
+                            Add Paper
+                          </button>
+                        </div>
+                      </div>
+                      
+                      <div className="text-sm text-gray-700 mb-3 line-clamp-2">
+                        {paper.abstract}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div className="mt-4 pt-4 border-t flex justify-between items-center">
+                <div className="text-sm text-gray-600">
+                  {allPapers.filter(paper => {
+                    if (relatedPapers.some(linkedPaper => linkedPaper.id === paper.id)) {
+                      return false
+                    }
+                    if (paperSearchFilter.search) {
+                      const searchLower = paperSearchFilter.search.toLowerCase()
+                      const matchesSearch = 
+                        paper.title.toLowerCase().includes(searchLower) ||
+                        paper.abstract?.toLowerCase().includes(searchLower) ||
+                        paper.authors.some(author => author.toLowerCase().includes(searchLower))
+                      if (!matchesSearch) return false
+                    }
+                    if (paperSearchFilter.company !== 'all' && paper.company !== paperSearchFilter.company) {
+                      return false
+                    }
+                    return true
+                  }).length} available papers to add
+                </div>
+                <button
+                  onClick={() => {
+                    setShowAddPaperModal(false)
+                    setPaperSearchFilter({ search: '', company: 'all' })
+                  }}
+                  className="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded"
+                >
+                  Done
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Add Resource Modal */}
+        {showAddResourceModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <div className="bg-white rounded-lg max-w-2xl w-full p-6">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-semibold">Add Interview Resource</h3>
+                <button
+                  onClick={() => {
+                    setShowAddResourceModal(false)
+                    setNewResource({
+                      title: '',
+                      url: '',
+                      resource_type: 'note',
+                      content: '',
+                      tags: []
+                    })
+                  }}
+                  className="text-gray-500 hover:text-gray-700"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Title</label>
+                  <input
+                    type="text"
+                    value={newResource.title}
+                    onChange={(e) => setNewResource({...newResource, title: e.target.value})}
+                    placeholder="Resource title..."
+                    className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Resource Type</label>
+                  <select
+                    value={newResource.resource_type}
+                    onChange={(e) => setNewResource({...newResource, resource_type: e.target.value as any})}
+                    className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="note">Note</option>
+                    <option value="preparation">Preparation Material</option>
+                    <option value="question">Interview Questions</option>
+                    <option value="experience">Experience/Tips</option>
+                    <option value="other">Other</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">URL (optional)</label>
+                  <input
+                    type="url"
+                    value={newResource.url}
+                    onChange={(e) => setNewResource({...newResource, url: e.target.value})}
+                    placeholder="https://..."
+                    className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Content</label>
+                  <textarea
+                    value={newResource.content}
+                    onChange={(e) => setNewResource({...newResource, content: e.target.value})}
+                    placeholder="Resource content, notes, or description..."
+                    className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-blue-500"
+                    rows={4}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Tags (comma-separated)</label>
+                  <input
+                    type="text"
+                    value={newResource.tags.join(', ')}
+                    onChange={(e) => setNewResource({...newResource, tags: e.target.value.split(',').map(t => t.trim()).filter(Boolean)})}
+                    placeholder="interview, preparation, technical..."
+                    className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+
+                <div className="flex gap-3">
+                  <button
+                    onClick={addInterviewResource}
+                    className="flex-1 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700"
+                    disabled={!newResource.title.trim() || !newResource.content.trim()}
+                  >
+                    Add Resource
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowAddResourceModal(false)
+                      setNewResource({
+                        title: '',
+                        url: '',
+                        resource_type: 'note',
+                        content: '',
+                        tags: []
+                      })
+                    }}
+                    className="flex-1 bg-gray-200 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-300"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
         )}
 

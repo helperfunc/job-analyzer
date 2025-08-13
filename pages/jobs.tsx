@@ -291,35 +291,38 @@ export default function JobsPage() {
     if (!selectedJob || !newResource.title.trim()) return
 
     try {
-      // For now, we'll store this locally since we don't have interview_resources API yet
-      const resource: InterviewResource = {
-        id: generateUUID(),
-        job_id: selectedJob.id,
-        title: newResource.title,
-        url: newResource.url,
-        resource_type: newResource.resource_type,
-        content: newResource.content,
-        tags: newResource.tags,
-        created_at: new Date().toISOString()
-      }
-
-      // Store in localStorage for now
-      const existingResources = JSON.parse(localStorage.getItem('interview_resources') || '[]')
-      existingResources.push(resource)
-      localStorage.setItem('interview_resources', JSON.stringify(existingResources))
-
-      showToastMessage(`✅ Interview resource "${resource.title}" added successfully!`)
-      setShowResourceModal(false)
-      setNewResource({
-        title: '',
-        url: '',
-        resource_type: 'note',
-        content: '',
-        tags: []
+      const response = await fetch('/api/interview-resources', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          job_id: selectedJob.id,
+          title: newResource.title,
+          url: newResource.url || null,
+          resource_type: newResource.resource_type,
+          content: newResource.content,
+          tags: newResource.tags
+        })
       })
+
+      const data = await response.json()
+
+      if (data.success) {
+        showToastMessage(`✅ Interview resource "${data.data.title}" added successfully!`)
+        setShowResourceModal(false)
+        setNewResource({
+          title: '',
+          url: '',
+          resource_type: 'note',
+          content: '',
+          tags: []
+        })
+      } else {
+        console.error('Failed to add resource:', data.error)
+        showToastMessage(`❌ Failed to add interview resource`)
+      }
     } catch (err) {
       console.error('Failed to add interview resource:', err)
-      showToastMessage(`❌ Failed to add interview resource`)
+      showToastMessage(`❌ Network error occurred`)
     }
   }
 
@@ -468,7 +471,7 @@ export default function JobsPage() {
                 <div className="flex-1">
                   <h3 
                     className="text-lg font-semibold text-blue-600 hover:underline cursor-pointer line-clamp-2"
-                    onClick={() => window.open(`/job/${job.id}?company=${job.company.toLowerCase()}&index=0`, '_blank')}
+                    onClick={() => router.push(`/job/${job.id}?company=${job.company.toLowerCase()}&index=0`)}
                   >
                     {job.title}
                   </h3>
@@ -532,7 +535,7 @@ export default function JobsPage() {
               </div>
               
               <button
-                onClick={() => window.open(`/job/${job.id}?company=${job.company.toLowerCase()}&index=0`, '_blank')}
+                onClick={() => router.push(`/job/${job.id}?company=${job.company.toLowerCase()}&index=0`)}
                 className="w-full mt-2 text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-2 rounded"
               >
                 View Details

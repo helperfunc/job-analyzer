@@ -7,10 +7,8 @@ interface JobResource {
   url?: string
   resource_type: 'video' | 'article' | 'tool' | 'course' | 'book' | 'other'
   description?: string
-  tags: string[]
-  rating?: number
-  notes?: string
   created_at: string
+  updated_at?: string
 }
 
 export default function ResourcesTab({ userId }: { userId: string }) {
@@ -20,9 +18,7 @@ export default function ResourcesTab({ userId }: { userId: string }) {
     title: '',
     url: '',
     resource_type: 'article' as any,
-    description: '',
-    rating: 5,
-    notes: ''
+    description: ''
   })
 
   useEffect(() => {
@@ -30,98 +26,78 @@ export default function ResourcesTab({ userId }: { userId: string }) {
   }, [userId])
 
   const fetchResources = async () => {
-    // Use localStorage for persistence since API not implemented yet
-    const storageKey = `job-resources-${userId}`
-    const storedResources = localStorage.getItem(storageKey)
-    
-    if (storedResources) {
-      try {
-        setResources(JSON.parse(storedResources))
-        return
-      } catch (error) {
-        console.error('Error parsing stored resources:', error)
+    try {
+      const response = await fetch(`/api/job-resources?user_id=${userId}`)
+      const data = await response.json()
+      
+      if (data.success) {
+        setResources(data.data)
+      } else {
+        console.error('Failed to fetch resources:', data.error)
       }
+    } catch (error) {
+      console.error('Error fetching resources:', error)
     }
-    
-    // Default mock data for first time users
-    const defaultResources = [
-      {
-        id: '1',
-        user_id: userId,
-        title: 'System Design Interview Guide',
-        url: 'https://github.com/donnemartin/system-design-primer',
-        resource_type: 'article',
-        description: 'Comprehensive guide for system design interviews',
-        tags: ['system-design', 'interview'],
-        rating: 5,
-        notes: 'Excellent resource for senior roles',
-        created_at: new Date().toISOString()
-      },
-      {
-        id: '2',
-        user_id: userId,
-        title: 'LeetCode Patterns',
-        url: 'https://seanprashad.com/leetcode-patterns/',
-        resource_type: 'tool',
-        description: 'Curated list of LeetCode questions grouped by patterns',
-        tags: ['leetcode', 'algorithms'],
-        rating: 4,
-        notes: 'Great for interview prep',
-        created_at: new Date().toISOString()
-      },
-      {
-        id: '3',
-        user_id: userId,
-        title: 'ML System Design Interview',
-        url: 'https://www.youtube.com/watch?v=example',
-        resource_type: 'video',
-        description: 'How to approach ML system design interviews',
-        tags: ['ml', 'system-design', 'interview'],
-        rating: 5,
-        notes: 'Great walkthrough by ex-Google engineer',
-        created_at: new Date().toISOString()
-      }
-    ]
-    
-    setResources(defaultResources)
-    localStorage.setItem(storageKey, JSON.stringify(defaultResources))
   }
 
   const addResource = async () => {
-    const resource: JobResource = {
-      id: Date.now().toString(),
-      user_id: userId,
-      ...newResource,
-      tags: [],
-      created_at: new Date().toISOString()
+    try {
+      const response = await fetch('/api/job-resources', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id: userId,
+          title: newResource.title,
+          url: newResource.url || null,
+          resource_type: newResource.resource_type,
+          description: newResource.description || null
+        })
+      })
+      
+      const data = await response.json()
+      
+      if (data.success) {
+        // Add the new resource to the list
+        setResources([data.data, ...resources])
+        
+        setShowAddForm(false)
+        setNewResource({
+          title: '',
+          url: '',
+          resource_type: 'article',
+          description: ''
+        })
+      } else {
+        console.error('Failed to add resource:', data.error)
+        alert('Failed to add resource. Please try again.')
+      }
+    } catch (error) {
+      console.error('Error adding resource:', error)
+      alert('Network error. Please try again.')
     }
-    const updatedResources = [resource, ...resources]
-    setResources(updatedResources)
-    
-    // Save to localStorage
-    const storageKey = `job-resources-${userId}`
-    localStorage.setItem(storageKey, JSON.stringify(updatedResources))
-    
-    setShowAddForm(false)
-    setNewResource({
-      title: '',
-      url: '',
-      resource_type: 'article',
-      description: '',
-      rating: 5,
-      notes: ''
-    })
   }
 
-  const deleteResource = (resourceId: string) => {
+  const deleteResource = async (resourceId: string) => {
     if (!confirm('Are you sure you want to delete this resource?')) return
     
-    const updatedResources = resources.filter(r => r.id !== resourceId)
-    setResources(updatedResources)
-    
-    // Save to localStorage
-    const storageKey = `job-resources-${userId}`
-    localStorage.setItem(storageKey, JSON.stringify(updatedResources))
+    try {
+      const response = await fetch(`/api/job-resources/${resourceId}`, {
+        method: 'DELETE'
+      })
+      
+      const data = await response.json()
+      
+      if (data.success) {
+        // Remove the resource from the list
+        setResources(resources.filter(r => r.id !== resourceId))
+      } else {
+        console.error('Failed to delete resource:', data.error)
+        alert('Failed to delete resource. Please try again.')
+      }
+    } catch (error) {
+      console.error('Error deleting resource:', error)
+      alert('Network error. Please try again.')
+    }
   }
 
   return (
@@ -178,26 +154,6 @@ export default function ResourcesTab({ userId }: { userId: string }) {
               className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
               rows={3}
             />
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Rating: {newResource.rating}/5
-              </label>
-              <input
-                type="range"
-                min="1"
-                max="5"
-                value={newResource.rating}
-                onChange={(e) => setNewResource({...newResource, rating: parseInt(e.target.value)})}
-                className="w-full"
-              />
-            </div>
-            <textarea
-              placeholder="Personal notes"
-              value={newResource.notes}
-              onChange={(e) => setNewResource({...newResource, notes: e.target.value})}
-              className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
-              rows={3}
-            />
             <button
               onClick={addResource}
               disabled={!newResource.title}
@@ -233,11 +189,6 @@ export default function ResourcesTab({ userId }: { userId: string }) {
                   }`}>
                     {resource.resource_type}
                   </span>
-                  {resource.rating && (
-                    <span className="text-sm text-gray-600">
-                      {'★'.repeat(resource.rating)}{'☆'.repeat(5 - resource.rating)}
-                    </span>
-                  )}
                   <button
                     onClick={() => deleteResource(resource.id)}
                     className="text-sm bg-red-500 hover:bg-red-600 text-white px-2 py-1 rounded ml-2 font-bold"
@@ -249,18 +200,6 @@ export default function ResourcesTab({ userId }: { userId: string }) {
               </div>
               {resource.description && (
                 <p className="text-gray-700 mb-2">{resource.description}</p>
-              )}
-              {resource.notes && (
-                <p className="text-sm text-gray-600 italic mb-2">"{resource.notes}"</p>
-              )}
-              {resource.tags && resource.tags.length > 0 && (
-                <div className="flex flex-wrap gap-1 mb-2">
-                  {resource.tags.map((tag, i) => (
-                    <span key={i} className="px-2 py-1 bg-gray-100 text-gray-600 rounded text-xs">
-                      {tag}
-                    </span>
-                  ))}
-                </div>
               )}
               {resource.url && (
                 <a href={resource.url} target="_blank" rel="noopener noreferrer" 
