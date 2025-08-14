@@ -31,7 +31,6 @@ export default async function handler(
       let query = supabase
         .from('research_papers')
         .select('*')
-        .order('publication_date', { ascending: false })
         .range(Number(offset), Number(offset) + Number(limit) - 1)
 
       if (company) {

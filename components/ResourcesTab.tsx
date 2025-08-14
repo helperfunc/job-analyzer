@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 
 interface JobResource {
   id: string
+  job_id?: string
   user_id: string
   title: string
   url?: string
@@ -9,9 +10,20 @@ interface JobResource {
   description?: string
   created_at: string
   updated_at?: string
+  jobs?: {
+    id: string
+    title: string
+    company: string
+  }
 }
 
-export default function ResourcesTab({ userId }: { userId: string }) {
+interface ResourcesTabProps {
+  userId: string
+  jobId?: string
+  showJobLinking?: boolean
+}
+
+export default function ResourcesTab({ userId, jobId, showJobLinking = false }: ResourcesTabProps) {
   const [resources, setResources] = useState<JobResource[]>([])
   const [showAddForm, setShowAddForm] = useState(false)
   const [newResource, setNewResource] = useState({
@@ -27,7 +39,12 @@ export default function ResourcesTab({ userId }: { userId: string }) {
 
   const fetchResources = async () => {
     try {
-      const response = await fetch(`/api/job-resources?user_id=${userId}`)
+      let url = `/api/job-resources?user_id=${userId}`
+      if (jobId) {
+        url += `&job_id=${jobId}`
+      }
+      
+      const response = await fetch(url)
       const data = await response.json()
       
       if (data.success) {
@@ -47,6 +64,7 @@ export default function ResourcesTab({ userId }: { userId: string }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           user_id: userId,
+          job_id: jobId || null,
           title: newResource.title,
           url: newResource.url || null,
           resource_type: newResource.resource_type,
@@ -200,6 +218,11 @@ export default function ResourcesTab({ userId }: { userId: string }) {
               </div>
               {resource.description && (
                 <p className="text-gray-700 mb-2">{resource.description}</p>
+              )}
+              {resource.jobs && (
+                <p className="text-xs text-gray-500 mb-2">
+                  🔗 Linked to: {resource.jobs.company} - {resource.jobs.title}
+                </p>
               )}
               {resource.url && (
                 <a href={resource.url} target="_blank" rel="noopener noreferrer" 

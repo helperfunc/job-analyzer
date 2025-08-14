@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/router'
+import ResourcesTab from '../components/ResourcesTab'
 
 interface Job {
   id: string
@@ -54,6 +55,7 @@ export default function JobsPage() {
     department: 'all',
     salaryRange: 'all'
   })
+  const [sortBy, setSortBy] = useState<'default' | 'salary-high' | 'salary-low' | 'date'>('salary-high')
   const [selectedJob, setSelectedJob] = useState<Job | null>(null)
   const [showPaperModal, setShowPaperModal] = useState(false)
   const [showResourceModal, setShowResourceModal] = useState(false)
@@ -68,6 +70,8 @@ export default function JobsPage() {
   const [jobsPerPage] = useState(12)
   const [toastMessage, setToastMessage] = useState('')
   const [showToast, setShowToast] = useState(false)
+  const [activeTab, setActiveTab] = useState<'jobs' | 'resources'>('jobs')
+  const [userId] = useState('default')
   const [paperSearchFilter, setPaperSearchFilter] = useState({
     search: '',
     company: 'all'
@@ -88,6 +92,11 @@ export default function JobsPage() {
     url: ''
   })
   const [scrapingJob, setScrapingJob] = useState(false)
+  const [checkingDuplicates, setCheckingDuplicates] = useState(false)
+  const [cleaningDuplicates, setCleaningDuplicates] = useState(false)
+  const [duplicateStats, setDuplicateStats] = useState<any>(null)
+  const [showDuplicateDetails, setShowDuplicateDetails] = useState(false)
+  const [clearingAll, setClearingAll] = useState(false)
 
   // Generate a UUID v4-like ID
   const generateUUID = (): string => {
@@ -108,6 +117,7 @@ export default function JobsPage() {
   }
 
   useEffect(() => {
+    console.log('Jobs page loading...')
     fetchJobs()
     fetchPapers()
   }, [])
@@ -174,25 +184,14 @@ export default function JobsPage() {
 
   const fetchPapers = async () => {
     try {
-      const response = await fetch('/api/research/papers?limit=500')
+      console.log('Fetching papers...')
+      const response = await fetch('/api/research/papers?limit=100')
       const data = await response.json()
       if (data.success) {
-        // Fetch linked jobs for each paper
-        const papersWithJobs = await Promise.all(
-          data.data.map(async (paper: Paper) => {
-            try {
-              const jobsResponse = await fetch(`/api/research/paper-jobs?paperId=${paper.id}`)
-              const jobsData = await jobsResponse.json()
-              return {
-                ...paper,
-                linkedJobs: jobsData.success ? jobsData.data : []
-              }
-            } catch {
-              return { ...paper, linkedJobs: [] }
-            }
-          })
-        )
-        setPapers(papersWithJobs)
+        // Just set papers without fetching linked jobs to avoid performance issues
+        // Linked jobs will be fetched on demand when needed
+        setPapers(data.data || [])
+        console.log(`Loaded ${data.data?.length || 0} papers`)
       }
     } catch (err) {
       console.error('Failed to fetch papers:', err)
@@ -340,6 +339,94 @@ export default function JobsPage() {
     }
   }
 
+  const checkForDuplicates = async () => {
+    setCheckingDuplicates(true)
+    try {
+      const response = await fetch('/api/jobs/check-duplicates')
+      const data = await response.json()
+      
+      if (data.success) {
+        setDuplicateStats(data)
+        setShowDuplicateDetails(true)
+        const totalDuplicates = data.summary.totalDuplicates
+        if (totalDuplicates > 0) {
+          showToastMessage(`🔍 Found ${totalDuplicates} duplicate jobs across companies`)
+        } else {
+          showToastMessage('✅ No duplicate jobs found!')
+        }
+      } else {
+        showToastMessage('❌ Failed to check for duplicates')
+      }
+    } catch (error) {
+      console.error('Error checking duplicates:', error)
+      showToastMessage('❌ Network error while checking duplicates')
+    } finally {
+      setCheckingDuplicates(false)
+    }
+  }
+
+  const cleanDuplicates = async () => {
+    if (!duplicateStats || duplicateStats.summary.totalDuplicates === 0) {
+      showToastMessage('❌ No duplicates found to clean')
+      return
+    }
+
+    setCleaningDuplicates(true)
+    try {
+      const response = await fetch('/api/jobs/clean-duplicates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      })
+      
+      const data = await response.json()
+      
+      if (data.success) {
+        showToastMessage(`✅ Cleaned ${data.stats.duplicatesRemoved} duplicate jobs!`)
+        // Refresh the jobs list
+        fetchJobs()
+        // Clear duplicate stats
+        setDuplicateStats(null)
+        setShowDuplicateDetails(false)
+      } else {
+        showToastMessage('❌ Failed to clean duplicates')
+      }
+    } catch (error) {
+      console.error('Error cleaning duplicates:', error)
+      showToastMessage('❌ Network error while cleaning duplicates')
+    } finally {
+      setCleaningDuplicates(false)
+    }
+  }
+
+  const clearAllJobs = async () => {
+    const confirmed = confirm('⚠️ 确定要删除所有工作数据吗？\n\n这将删除数据库中的所有工作记录，此操作不可撤销！')
+    
+    if (!confirmed) return
+
+    setClearingAll(true)
+    try {
+      const response = await fetch('/api/jobs/clear-all', {
+        method: 'DELETE'
+      })
+      
+      const data = await response.json()
+      
+      if (data.success) {
+        setJobs([])
+        setDuplicateStats(null)
+        setShowDuplicateDetails(false)
+        showToastMessage(`✅ ${data.message}`)
+      } else {
+        showToastMessage('❌ Failed to clear all jobs')
+      }
+    } catch (error) {
+      console.error('Error clearing all jobs:', error)
+      showToastMessage('❌ Network error while clearing jobs')
+    } finally {
+      setClearingAll(false)
+    }
+  }
+
   const createJob = async () => {
     if (!newJob.title.trim() || !newJob.company.trim()) {
       showToastMessage('❌ Title and company are required')
@@ -363,8 +450,8 @@ export default function JobsPage() {
       const data = await response.json()
 
       if (data.success) {
-        // Add the new job to the list
-        setJobs(prev => [jobData, ...prev])
+        // Refresh the jobs list instead of adding locally
+        fetchJobs()
         showToastMessage(`✅ Job "${jobData.title}" created successfully!`)
         setShowCreateJobModal(false)
         setNewJob({
@@ -386,6 +473,32 @@ export default function JobsPage() {
     } catch (err) {
       console.error('Failed to create job:', err)
       showToastMessage(`❌ Network error occurred`)
+    }
+  }
+
+  const deleteJob = async (jobId: string, jobTitle: string) => {
+    if (!confirm(`Are you sure you want to permanently delete the job "${jobTitle}"? This action cannot be undone and will remove all associated resources and papers.`)) {
+      return
+    }
+
+    try {
+      const response = await fetch(`/api/jobs/${jobId}`, {
+        method: 'DELETE'
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        // Remove the job from the local state
+        setJobs(prev => prev.filter(job => job.id !== jobId))
+        showToastMessage(`🗑️ Job "${jobTitle}" deleted successfully`)
+      } else {
+        console.error('Failed to delete job:', data.error)
+        showToastMessage('❌ Failed to delete job')
+      }
+    } catch (err) {
+      console.error('Failed to delete job:', err)
+      showToastMessage('❌ Network error occurred')
     }
   }
 
@@ -449,7 +562,158 @@ export default function JobsPage() {
       return false
     }
     
+    if (filter.salaryRange !== 'all') {
+      const salary = job.salary_max || job.salary_min || 0
+      if (filter.salaryRange === '0-200' && salary > 200000) return false
+      if (filter.salaryRange === '200-300' && (salary <= 200000 || salary > 300000)) return false
+      if (filter.salaryRange === '300-400' && (salary <= 300000 || salary > 400000)) return false
+      if (filter.salaryRange === '400+' && salary <= 400000) return false
+    }
+    
     return true
+  })
+
+  // Sort jobs based on selected sorting option
+  const sortedJobs = [...filteredJobs].sort((a, b) => {
+    switch (sortBy) {
+      case 'salary-high':
+        // Helper function to extract max salary from various formats
+        const getMaxSalary = (job: Job) => {
+          if (job.salary_max) {
+            // Check if this looks like a K value that wasn't converted
+            if (job.salary_max < 10000) {
+              return job.salary_max * 1000
+            }
+            return job.salary_max
+          }
+          if (job.salary_min) {
+            // Check if this looks like a K value that wasn't converted
+            if (job.salary_min < 10000) {
+              return job.salary_min * 1000
+            }
+            return job.salary_min
+          }
+          if (job.salary) {
+            // Parse string salary like "$197,000-$291,000" or "$460K – $685K"
+            const matches = job.salary.match(/\$?([\d,]+)([KkMm]?)[\s]*[-–—][\s]*\$?([\d,]+)([KkMm]?)/)
+            if (matches) {
+              const maxStr = matches[3] || matches[1]
+              const maxUnit = matches[4] || matches[2]
+              let maxValue = parseInt(maxStr.replace(/,/g, ''))
+              if (maxUnit && maxUnit.toLowerCase() === 'k') maxValue *= 1000
+              if (maxUnit && maxUnit.toLowerCase() === 'm') maxValue *= 1000000
+              return maxValue
+            }
+            // Try single value like "$150K" or "$150,000"
+            const singleMatch = job.salary.match(/\$?([\d,]+)([KkMm]?)/)
+            if (singleMatch) {
+              const unit = singleMatch[2]
+              let value = parseInt(singleMatch[1].replace(/,/g, ''))
+              if (unit && unit.toLowerCase() === 'k') value *= 1000
+              if (unit && unit.toLowerCase() === 'm') value *= 1000000
+              return value
+            }
+          }
+          return 0
+        }
+
+        // Jobs without salary go to the end
+        const aMaxSalary = getMaxSalary(a)
+        const bMaxSalary = getMaxSalary(b)
+        const aHasSalary = aMaxSalary > 0
+        const bHasSalary = bMaxSalary > 0
+        
+        if (!aHasSalary && !bHasSalary) {
+          // Both have no salary, sort by creation date (newest first)
+          return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        }
+        if (!aHasSalary) return 1  // a goes after b
+        if (!bHasSalary) return -1 // b goes after a
+        
+        // Both have salary, sort by max salary descending
+        const aMax = aMaxSalary
+        const bMax = bMaxSalary
+        
+        if (aMax === bMax) {
+          // Same salary, sort by creation date (newest first)
+          return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        }
+        
+        return bMax - aMax
+        
+      case 'salary-low':
+        // Helper function to extract min salary from various formats
+        const getMinSalary = (job: Job) => {
+          if (job.salary_min) {
+            // Check if this looks like a K value that wasn't converted
+            if (job.salary_min < 10000) {
+              return job.salary_min * 1000
+            }
+            return job.salary_min
+          }
+          if (job.salary_max) {
+            // Check if this looks like a K value that wasn't converted
+            if (job.salary_max < 10000) {
+              return job.salary_max * 1000
+            }
+            return job.salary_max
+          }
+          if (job.salary) {
+            // Parse string salary like "$197,000-$291,000" or "$460K – $685K"
+            const matches = job.salary.match(/\$?([\d,]+)([KkMm]?)[\s]*[-–—][\s]*\$?([\d,]+)([KkMm]?)/)
+            if (matches) {
+              const minStr = matches[1]
+              const minUnit = matches[2]
+              let minValue = parseInt(minStr.replace(/,/g, ''))
+              if (minUnit && minUnit.toLowerCase() === 'k') minValue *= 1000
+              if (minUnit && minUnit.toLowerCase() === 'm') minValue *= 1000000
+              return minValue
+            }
+            // Try single value like "$150K" or "$150,000"
+            const singleMatch = job.salary.match(/\$?([\d,]+)([KkMm]?)/)
+            if (singleMatch) {
+              const unit = singleMatch[2]
+              let value = parseInt(singleMatch[1].replace(/,/g, ''))
+              if (unit && unit.toLowerCase() === 'k') value *= 1000
+              if (unit && unit.toLowerCase() === 'm') value *= 1000000
+              return value
+            }
+          }
+          return 0
+        }
+
+        // Jobs without salary go to the end
+        const aMinSalary = getMinSalary(a)
+        const bMinSalary = getMinSalary(b)
+        const aHasSalaryLow = aMinSalary > 0
+        const bHasSalaryLow = bMinSalary > 0
+        
+        if (!aHasSalaryLow && !bHasSalaryLow) {
+          // Both have no salary, sort by creation date (newest first)
+          return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        }
+        if (!aHasSalaryLow) return 1  // a goes after b
+        if (!bHasSalaryLow) return -1 // b goes after a
+        
+        // Both have salary, sort by min salary ascending
+        const aMin = aMinSalary
+        const bMin = bMinSalary
+        
+        if (aMin === bMin) {
+          // Same salary, sort by creation date (newest first)
+          return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        }
+        
+        return aMin - bMin
+        
+      case 'date':
+        // Sort by created_at date (newest first)
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        
+      default:
+        // Default sorting (maintain original order)
+        return 0
+    }
   })
 
   // Get unique values for filters
@@ -457,22 +721,23 @@ export default function JobsPage() {
   const departments = [...new Set(jobs.map(job => job.department).filter(Boolean))]
 
   // Pagination
-  const totalPages = Math.ceil(filteredJobs.length / jobsPerPage)
+  const totalPages = Math.ceil(sortedJobs.length / jobsPerPage)
   const indexOfLastJob = currentPage * jobsPerPage
   const indexOfFirstJob = indexOfLastJob - jobsPerPage
-  const currentJobs = filteredJobs.slice(indexOfFirstJob, indexOfLastJob)
+  const currentJobs = sortedJobs.slice(indexOfFirstJob, indexOfLastJob)
 
   const handleFilterChange = (newFilter: any) => {
     setFilter(newFilter)
     setCurrentPage(1)
   }
 
-  if (loading) {
+  if (loading && jobs.length === 0) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
           <p className="text-gray-600">Loading jobs...</p>
+          <p className="text-sm text-gray-500 mt-2">If this takes too long, try refreshing the page</p>
         </div>
       </div>
     )
@@ -489,6 +754,36 @@ export default function JobsPage() {
               className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700"
             >
               + Create Job
+            </button>
+            <button
+              onClick={checkForDuplicates}
+              disabled={checkingDuplicates}
+              className="bg-yellow-600 text-white px-4 py-2 rounded-lg hover:bg-yellow-700 disabled:opacity-50"
+            >
+              {checkingDuplicates ? '🔍 Checking...' : '🔍 Check Duplicates'}
+            </button>
+            {duplicateStats && duplicateStats.summary.totalDuplicates > 0 && (
+              <button
+                onClick={cleanDuplicates}
+                disabled={cleaningDuplicates}
+                className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 disabled:opacity-50"
+              >
+                {cleaningDuplicates ? '🧹 Cleaning...' : `🧹 Clean ${duplicateStats.summary.totalDuplicates} Duplicates`}
+              </button>
+            )}
+            <button
+              onClick={clearAllJobs}
+              disabled={clearingAll}
+              className="bg-red-800 text-white px-4 py-2 rounded-lg hover:bg-red-900 disabled:opacity-50"
+              title="Delete all jobs from database"
+            >
+              {clearingAll ? '🗑️ Clearing...' : '🗑️ Clear All'}
+            </button>
+            <button
+              onClick={() => router.push('/compare-v2')}
+              className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700"
+            >
+              🔥 Compare Companies
             </button>
             <button
               onClick={() => router.push('/research')}
@@ -513,7 +808,7 @@ export default function JobsPage() {
 
         {/* Filters */}
         <div className="bg-white p-6 rounded-lg shadow-sm border mb-6">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Search</label>
               <input
@@ -553,6 +848,21 @@ export default function JobsPage() {
               </select>
             </div>
             
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Salary Range</label>
+              <select
+                value={filter.salaryRange}
+                onChange={(e) => handleFilterChange({...filter, salaryRange: e.target.value})}
+                className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="all">All Salaries</option>
+                <option value="0-200">$0 - $200K</option>
+                <option value="200-300">$200K - $300K</option>
+                <option value="300-400">$300K - $400K</option>
+                <option value="400+">$400K+</option>
+              </select>
+            </div>
+            
             <div className="flex items-end">
               <button
                 onClick={() => handleFilterChange({search: '', company: 'all', department: 'all', salaryRange: 'all'})}
@@ -565,12 +875,52 @@ export default function JobsPage() {
           
           <div className="mt-4 flex justify-between items-center">
             <span className="text-sm text-gray-600">
-              Showing {indexOfFirstJob + 1}-{Math.min(indexOfLastJob, filteredJobs.length)} of {filteredJobs.length} jobs
-              {filteredJobs.length !== jobs.length && ` (filtered from ${jobs.length})`}
+              Showing {indexOfFirstJob + 1}-{Math.min(indexOfLastJob, sortedJobs.length)} of {sortedJobs.length} jobs
+              {sortedJobs.length !== jobs.length && ` (filtered from ${jobs.length})`}
             </span>
+            <div className="flex items-center gap-2">
+              <label className="text-sm font-medium text-gray-700">Sort by:</label>
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as any)}
+                className="px-3 py-1 border rounded text-sm focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="default">Default</option>
+                <option value="salary-high">Salary (High to Low)</option>
+                <option value="salary-low">Salary (Low to High)</option>
+                <option value="date">Date (Newest First)</option>
+              </select>
+            </div>
           </div>
         </div>
 
+        {/* Tab Navigation */}
+        <div className="flex space-x-6 mb-6 border-b bg-white px-6 py-3 rounded-lg shadow-sm">
+          <button
+            onClick={() => setActiveTab('jobs')}
+            className={`pb-3 px-2 font-medium transition-colors ${
+              activeTab === 'jobs'
+                ? 'text-blue-600 border-b-2 border-blue-600'
+                : 'text-gray-600 hover:text-gray-800'
+            }`}
+          >
+            Jobs ({jobs.length})
+          </button>
+          <button
+            onClick={() => setActiveTab('resources')}
+            className={`pb-3 px-2 font-medium transition-colors ${
+              activeTab === 'resources'
+                ? 'text-blue-600 border-b-2 border-blue-600'
+                : 'text-gray-600 hover:text-gray-800'
+            }`}
+          >
+            Job Resources
+          </button>
+        </div>
+
+        {/* Tab Content */}
+        {activeTab === 'jobs' && (
+          <>
         {/* Jobs Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {currentJobs.map(job => (
@@ -579,7 +929,10 @@ export default function JobsPage() {
                 <div className="flex-1">
                   <h3 
                     className="text-lg font-semibold text-blue-600 hover:underline cursor-pointer line-clamp-2"
-                    onClick={() => router.push(`/job/${job.id}?company=${job.company.toLowerCase()}&index=0`)}
+                    onClick={() => {
+                      console.log('Navigating to job:', job.id, job.title)
+                      router.push(`/job/${job.id}?company=${job.company.toLowerCase()}&index=0`)
+                    }}
                   >
                     {job.title}
                   </h3>
@@ -589,17 +942,42 @@ export default function JobsPage() {
                     <p className="text-xs text-gray-500 mt-1">{job.department}</p>
                   )}
                 </div>
-                <span className={`px-2 py-1 text-xs rounded-full ${
-                  job.company === 'OpenAI' ? 'bg-blue-100 text-blue-700' :
-                  job.company === 'Anthropic' ? 'bg-purple-100 text-purple-700' :
-                  'bg-gray-100 text-gray-700'
-                }`}>
-                  {job.company}
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className={`px-2 py-1 text-xs rounded-full ${
+                    job.company === 'OpenAI' ? 'bg-blue-100 text-blue-700' :
+                    job.company === 'Anthropic' ? 'bg-purple-100 text-purple-700' :
+                    'bg-gray-100 text-gray-700'
+                  }`}>
+                    {job.company}
+                  </span>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation() // Prevent navigation when clicking delete
+                      deleteJob(job.id, job.title)
+                    }}
+                    className="text-red-600 hover:text-red-800 p-1 rounded"
+                    title="Delete job"
+                  >
+                    🗑️
+                  </button>
+                </div>
               </div>
 
-              {job.salary && (
-                <p className="text-sm text-green-600 font-medium mb-3">{job.salary}</p>
+              {(job.salary || job.salary_min || job.salary_max) && (
+                <div className="mb-3">
+                  <p className="text-lg font-semibold text-green-600">
+                    {job.salary ? job.salary : 
+                     job.salary_min && job.salary_max ? 
+                       `$${(job.salary_min / 1000).toFixed(0)}K - $${(job.salary_max / 1000).toFixed(0)}K` :
+                     job.salary_min ? 
+                       `$${(job.salary_min / 1000).toFixed(0)}K+` :
+                     job.salary_max ? 
+                       `Up to $${(job.salary_max / 1000).toFixed(0)}K` :
+                       'Salary not specified'
+                    }
+                  </p>
+                  <p className="text-xs text-gray-500">Annual (USD)</p>
+                </div>
               )}
 
               {job.skills && job.skills.length > 0 && (
@@ -1290,6 +1668,112 @@ export default function JobsPage() {
               </div>
             </div>
           </div>
+        )}
+
+        {/* Duplicate Details Modal */}
+        {showDuplicateDetails && duplicateStats && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <div className="bg-white rounded-lg max-w-4xl w-full max-h-[80vh] overflow-hidden p-6">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-semibold">Duplicate Job Analysis</h3>
+                <button
+                  onClick={() => setShowDuplicateDetails(false)}
+                  className="text-gray-500 hover:text-gray-700"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="mb-6">
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <h4 className="font-bold text-yellow-800">Summary</h4>
+                    <div className="text-sm text-yellow-700">
+                      Total Jobs: {duplicateStats.totalJobs} | 
+                      Total Duplicates: {duplicateStats.summary.totalDuplicates} |
+                      Companies with Duplicates: {duplicateStats.summary.companiesWithDuplicates}
+                    </div>
+                  </div>
+                  {duplicateStats.summary.totalDuplicates > 0 && (
+                    <p className="text-yellow-700 text-sm">
+                      Found duplicate jobs that can be cleaned to improve data accuracy.
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              <div className="overflow-y-auto max-h-[50vh]">
+                <div className="space-y-4">
+                  {duplicateStats.companies.map((company: any, index: number) => (
+                    <div key={company.company} className="border rounded-lg p-4">
+                      <div className="flex justify-between items-center mb-3">
+                        <h4 className="font-bold text-lg">{company.company}</h4>
+                        <div className="flex gap-4 text-sm text-gray-600">
+                          <span>Total: {company.totalJobs}</span>
+                          <span>Unique: {company.uniqueJobs}</span>
+                          <span className={`${company.duplicateCount > 0 ? 'text-red-600 font-bold' : 'text-green-600'}`}>
+                            Duplicates: {company.duplicateCount}
+                          </span>
+                        </div>
+                      </div>
+                      
+                      {company.duplicates.length > 0 && (
+                        <div>
+                          <p className="text-sm text-gray-700 mb-2">Duplicate Jobs:</p>
+                          <div className="space-y-1">
+                            {company.duplicates.map((duplicate: any, dupIndex: number) => (
+                              <div key={dupIndex} className="text-sm bg-red-50 px-3 py-2 rounded border border-red-200">
+                                <span className="font-medium">{duplicate.title}</span>
+                                <span className="text-red-600 ml-2">({duplicate.count} copies)</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      
+                      {company.duplicateCount === 0 && (
+                        <p className="text-sm text-green-600">✅ No duplicates found for this company</p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="mt-6 flex justify-between items-center pt-4 border-t">
+                <div className="text-sm text-gray-600">
+                  {duplicateStats.summary.totalDuplicates > 0 
+                    ? `Ready to clean ${duplicateStats.summary.totalDuplicates} duplicate jobs`
+                    : 'No duplicates to clean'}
+                </div>
+                <div className="flex gap-3">
+                  {duplicateStats.summary.totalDuplicates > 0 && (
+                    <button
+                      onClick={cleanDuplicates}
+                      disabled={cleaningDuplicates}
+                      className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 disabled:opacity-50"
+                    >
+                      {cleaningDuplicates ? '🧹 Cleaning...' : `🧹 Clean ${duplicateStats.summary.totalDuplicates} Duplicates`}
+                    </button>
+                  )}
+                  <button
+                    onClick={() => setShowDuplicateDetails(false)}
+                    className="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-300"
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+          </>
+        )}
+
+        {/* Resources Tab */}
+        {activeTab === 'resources' && (
+          <ResourcesTab 
+            userId={userId}
+          />
         )}
 
         {/* Toast Notification */}

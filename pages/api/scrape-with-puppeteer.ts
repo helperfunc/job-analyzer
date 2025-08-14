@@ -1,8 +1,7 @@
 import { NextApiRequest, NextApiResponse } from 'next'
 import * as cheerio from 'cheerio'
-import fs from 'fs'
-import path from 'path'
 import puppeteer from 'puppeteer'
+import { supabase } from '../../lib/supabase'
 
 interface Job {
   title: string
@@ -1104,45 +1103,28 @@ export default async function handler(
       }
     }
     
-    console.log(`✅ Found ${jobs.length} jobs`)
+    console.log(`✅ Found ${jobs.length} jobs (before deduplication)`)
     
-    // If we still have no jobs and this is not Anthropic, use OpenAI examples
-    if (jobs.length === 0 && !isAnthropic) {
-      console.log(`⚠️ Unable to parse jobs from page, using known ${companyName} positions...`)
-      // OpenAI example positions (only for OpenAI)
-      jobs.push(
-        {
-          title: 'Principal Engineer, GPU Platform',
-          url: 'https://openai.com/careers/principal-engineer-gpu-platform',
-          location: 'San Francisco',
-          department: 'Engineering',
-          salary: '$405K – $590K',
-          salary_min: 405,
-          salary_max: 590,
-          skills: ['CUDA', 'C++', 'GPU Programming', 'Distributed Systems']
-        },
-        {
-          title: 'Staff Machine Learning Engineer',
-          url: 'https://openai.com/careers/staff-ml-engineer',
-          location: 'San Francisco',
-          department: 'Engineering',
-          salary: '$350K – $500K',
-          salary_min: 350,
-          salary_max: 500,
-          skills: ['PyTorch', 'Distributed Training', 'Python', 'ML Infrastructure']
-        },
-        {
-          title: 'Senior Research Scientist',
-          url: 'https://openai.com/careers/senior-research-scientist',
-          location: 'San Francisco',
-          department: 'Research',
-          salary: '$300K – $450K',
-          salary_min: 300,
-          salary_max: 450,
-          skills: ['Deep Learning', 'NLP', 'Python', 'Research Publications']
-        }
-      )
-    } else if (jobs.length === 0 && isAnthropic) {
+    // Additional deduplication based on title + company + location
+    const seenJobs = new Map<string, Job>()
+    const uniqueJobs: Job[] = []
+    
+    jobs.forEach(job => {
+      const key = `${job.title?.toLowerCase() || ''}_${job.company?.toLowerCase() || ''}_${job.location?.toLowerCase() || ''}`
+      
+      if (!seenJobs.has(key)) {
+        seenJobs.set(key, job)
+        uniqueJobs.push(job)
+      } else {
+        console.log(`🔄 Removing duplicate: ${job.title} at ${job.location}`)
+      }
+    })
+    
+    jobs = uniqueJobs
+    console.log(`✅ After deduplication: ${jobs.length} unique jobs`)
+    
+    // If no jobs found, return appropriate error
+    if (jobs.length === 0) {
       console.log(`❌ Unable to find any job data for ${companyName}. The page might require JavaScript or use a different loading method.`)
       console.log(`💡 Suggestion: ${companyName} might use a different recruitment platform or require dynamic page loading.`)
     }
@@ -1150,105 +1132,143 @@ export default async function handler(
     // Sort by salary
     jobs.sort((a, b) => (b.salary_max || 0) - (a.salary_max || 0))
     
-    // If no jobs found for Anthropic, return error
-    if (jobs.length === 0 && isAnthropic) {
+    // If no jobs found, return error
+    if (jobs.length === 0) {
       return res.status(404).json({
         success: false,
         error: `No job listings found for ${companyName}`,
         message: `Unable to scrape jobs from ${mainUrl}. The page might use dynamic loading or a third-party platform.`,
         suggestions: [
           'The job listings might be loaded via JavaScript',
-          'Check if Anthropic uses a third-party recruitment platform',
+          `Check if ${companyName} uses a third-party recruitment platform`,
           'The page might require waiting for content to load',
-          'Try checking their LinkedIn jobs or other job boards'
+          'Try checking their LinkedIn jobs or other job boards',
+          'The website structure might have changed'
         ]
       })
     }
     
-    // Save to file
-    const dataDir = path.join(process.cwd(), 'data')
-    if (!fs.existsSync(dataDir)) {
-      fs.mkdirSync(dataDir)
+    // Save jobs directly to database
+    console.log(`💾 Saving ${jobs.length} jobs to database for ${companyName}...`)
+    
+    if (!supabase) {
+      return res.status(503).json({
+        success: false,
+        error: 'Database not configured'
+      })
     }
-    
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
-    const companySlug = companyName.toLowerCase()
-    const filename = `${companySlug}-jobs-${timestamp}.json`
-    const filepath = path.join(dataDir, filename)
-    
-    const saveData = {
-      scraped_at: new Date().toISOString(),
-      source_url: mainUrl,
-      total_jobs: jobs.length,
-      jobs_with_salary: jobs.filter(j => j.salary).length,
-      jobs
+
+    // Generate UUIDs for jobs
+    const generateUUID = (): string => {
+      return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+        const r = Math.random() * 16 | 0
+        const v = c === 'x' ? r : (r & 0x3 | 0x8)
+        return v.toString(16)
+      })
     }
-    
-    fs.writeFileSync(filepath, JSON.stringify(saveData, null, 2))
-    
-    console.log(`💾 Saved new data to: ${filename}`)
-    
-    // After saving, use the SAME logic as get-summary to determine which file to actually use
-    // This ensures consistency between scraping results and refresh results
-    const files = fs.readdirSync(dataDir).filter(f => f.startsWith(`${companySlug}-jobs-`) && f.endsWith('.json'))
-    
-    let actualDataFile
-    const refinedFiles = files.filter(f => f.includes('REFINED')).sort()
-    const fixedFiles = files.filter(f => f.includes('FIXED')).sort()
-    
-    if (refinedFiles.length > 0) {
-      actualDataFile = refinedFiles[refinedFiles.length - 1] // Latest REFINED file
-      console.log(`📊 Using REFINED data file for summary: ${actualDataFile}`)
-    } else if (fixedFiles.length > 0) {
-      actualDataFile = fixedFiles[fixedFiles.length - 1] // Latest FIXED file
-      console.log(`📊 Using FIXED data file for summary: ${actualDataFile}`)
-    } else {
-      actualDataFile = filename // Use the newly created file
-      console.log(`📊 Using newly created data file for summary: ${actualDataFile}`)
-    }
-    
-    // Read the actual data file that will be used (might be different from what we just created)
-    const actualFilePath = path.join(dataDir, actualDataFile)
-    const actualData = JSON.parse(fs.readFileSync(actualFilePath, 'utf8'))
-    
-    // Create summary from the ACTUAL data that will be displayed
-    const actualJobs = actualData.jobs || []
-    const highestPaying = actualJobs
-      .filter((j: Job) => j.salary_min)
-      .sort((a: Job, b: Job) => (b.salary_max || 0) - (a.salary_max || 0))
-      .slice(0, 10)
+
+    // Prepare jobs data for database
+    const dbJobs = jobs.map(job => ({
+      id: generateUUID(),
+      title: job.title,
+      company: companyName,
+      location: job.location || 'Remote',
+      department: job.department || 'Unknown',
+      salary: job.salary,
+      salary_min: job.salary_min,
+      salary_max: job.salary_max,
+      skills: job.skills || [],
+      description: job.description,
+      url: job.url,
+      created_at: new Date().toISOString()
+    }))
+
+    // Import jobs using duplicate checking logic
+    try {
+      const processedJobs = []
       
-    const skillsCount: Record<string, number> = {}
-    
-    // Count skills from ACTUAL jobs data
-    actualJobs.forEach((job: Job) => {
-      if (job.skills && job.skills.length > 0) {
-        job.skills.forEach(skill => {
-          skillsCount[skill] = (skillsCount[skill] || 0) + 1
-        })
+      for (const job of dbJobs) {
+        // Check if job already exists based on company, title, and location
+        const { data: existingJobs, error: checkError } = await supabase
+          .from('jobs')
+          .select('id')
+          .ilike('company', job.company)
+          .ilike('title', job.title)
+          .ilike('location', job.location || '')
+          .limit(1)
+        
+        if (checkError) {
+          console.error('Error checking for existing job:', checkError)
+          continue
+        }
+        
+        // If no existing job found, add to processed list
+        if (!existingJobs || existingJobs.length === 0) {
+          processedJobs.push(job)
+        } else {
+          console.log(`Skipping duplicate job: ${job.title} at ${job.company}`)
+        }
       }
-    })
-    
-    console.log(`📊 Skills found in ${actualDataFile}: ${Object.keys(skillsCount).length} different skills`)
-    
-    const topSkills = Object.entries(skillsCount)
-      .sort(([,a], [,b]) => b - a)
-      .slice(0, 15)
-      .map(([skill, count]) => ({ skill, count }))
-    
-    // Log the ML count for debugging
-    const mlSkill = topSkills.find(s => s.skill === 'Machine Learning')
-    console.log(`🔍 Machine Learning count: ${mlSkill?.count || 0}`)
-    
+      
+      // Import new jobs to database
+      let importedCount = 0
+      if (processedJobs.length > 0) {
+        const { data, error } = await supabase
+          .from('jobs')
+          .insert(processedJobs)
+          .select()
+
+        if (error) throw error
+        importedCount = data?.length || 0
+      }
+
+      console.log(`✅ Imported ${importedCount} new jobs, skipped ${jobs.length - processedJobs.length} duplicates`)
+      
+      // Get all jobs for this company to create summary
+      const { data: actualJobs, error: getAllError } = await supabase
+        .from('jobs')
+        .select('*')
+        .ilike('company', companyName)
+        .order('created_at', { ascending: false })
+      
+      if (getAllError) throw getAllError
+      
+      const highestPaying = actualJobs
+        .filter((j: any) => j.salary_min)
+        .sort((a: any, b: any) => (b.salary_max || 0) - (a.salary_max || 0))
+        .slice(0, 10)
+      
+      const skillsCount: Record<string, number> = {}
+      
+      // Count skills from ACTUAL jobs data
+      actualJobs.forEach((job: any) => {
+        if (job.skills && job.skills.length > 0) {
+          job.skills.forEach(skill => {
+            skillsCount[skill] = (skillsCount[skill] || 0) + 1
+          })
+        }
+      })
+      
+      console.log(`📊 Skills found in database: ${Object.keys(skillsCount).length} different skills`)
+      
+      const topSkills = Object.entries(skillsCount)
+        .sort(([,a], [,b]) => b - a)
+        .slice(0, 15)
+        .map(([skill, count]) => ({ skill, count }))
+      
+      // Log the ML count for debugging
+      const mlSkill = topSkills.find(s => s.skill === 'Machine Learning')
+      console.log(`🔍 Machine Learning count: ${mlSkill?.count || 0}`)
+      
       // Clear the timeout before returning
-      if (timeoutId) clearTimeout(timeoutId)
+      if (timeoutId) clearTimeout(timeoutId);
       
       return {
         success: true,
-        message: `Successfully scraped ${jobs.length} jobs from ${companyName} careers`,
+        message: `Successfully scraped and imported ${importedCount} new jobs from ${companyName} (${jobs.length - processedJobs.length} duplicates skipped)`,
         company: companyName,
-        filepath,
-        dataSource: actualDataFile, // Show which file was actually used for the summary
+        filepath: 'Database records',
+        dataSource: 'database',
         summary: {
           total_jobs: actualJobs.length,
           jobs_with_salary: actualJobs.filter((j: Job) => j.salary_min || j.salary_max).length,
@@ -1256,16 +1276,23 @@ export default async function handler(
           most_common_skills: topSkills
         }
       }
+    } catch (dbError) {
+      console.error('Database error during scraping:', dbError)
+      // Clear the timeout before returning
+      if (timeoutId) clearTimeout(timeoutId);
+      
+      return {
+        success: false,
+        error: 'Failed to save jobs to database',
+        details: dbError instanceof Error ? dbError.message : 'Database error'
+      }
     }
+    
+    } // End of scrapingLogic function
 
     // Execute scraping logic with timeout handling
-    try {
-      const result = await Promise.race([scrapingLogic(), timeoutPromise])
-      res.status(200).json(result)
-    } finally {
-      // Always clear the timeout
-      if (timeoutId) clearTimeout(timeoutId)
-    }
+    const result = await Promise.race([scrapingLogic(), timeoutPromise]);
+    res.status(200).json(result);
 
   } catch (error) {
     console.error('Scraping error:', error)
@@ -1282,5 +1309,8 @@ export default async function handler(
         details: error instanceof Error ? error.message : 'Unknown error'
       })
     }
+  } finally {
+    // Always clear the timeout
+    if (timeoutId) clearTimeout(timeoutId);
   }
 }

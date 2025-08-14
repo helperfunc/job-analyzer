@@ -1,6 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next'
-import fs from 'fs'
-import path from 'path'
+import { supabase } from '../../lib/supabase'
 
 interface Job {
   title: string
@@ -25,55 +24,69 @@ export default async function handler(
     // Get company parameter from query
     const { company } = req.query
     const companyFilter = company ? company.toString().toLowerCase() : 'openai'
+    const companyName = companyFilter.charAt(0).toUpperCase() + companyFilter.slice(1)
     
     console.log(`📊 Getting summary for company: ${companyFilter}`)
     
-    // Read the latest job data for the specified company
-    const dataDir = path.join(process.cwd(), 'data')
-    
-    if (!fs.existsSync(dataDir)) {
-      return res.status(404).json({ error: 'No job data found' })
+    // Check if database is configured
+    if (!supabase) {
+      return res.status(503).json({ 
+        error: 'Database not configured',
+        message: 'Please configure database connection'
+      })
     }
 
-    const files = fs.readdirSync(dataDir).filter(f => f.startsWith(`${companyFilter}-jobs-`) && f.endsWith('.json'))
+    // Get data from database only
+    const { data: dbJobs, error: dbError } = await supabase
+      .from('jobs')
+      .select('*')
+      .ilike('company', companyName)
+      .order('created_at', { ascending: false })
     
-    if (files.length === 0) {
-      return res.status(404).json({ error: 'No job data files found' })
+    if (dbError) {
+      console.error('Database query error:', dbError)
+      return res.status(500).json({ 
+        error: 'Database query failed',
+        details: dbError.message
+      })
     }
-    
-    // Prioritize REFINED files first, then FIXED files, then latest by time
-    let latestFile
-    const refinedFiles = files.filter(f => f.includes('REFINED')).sort()
-    const fixedFiles = files.filter(f => f.includes('FIXED')).sort()
-    
-    if (refinedFiles.length > 0) {
-      latestFile = refinedFiles[refinedFiles.length - 1] // Latest REFINED file
-      console.log(`📊 Summary using REFINED data file: ${latestFile}`)
-    } else if (fixedFiles.length > 0) {
-      latestFile = fixedFiles[fixedFiles.length - 1] // Latest FIXED file
-      console.log(`📊 Summary using FIXED data file: ${latestFile}`)
-    } else {
-      latestFile = files.sort().pop()! // Fallback to latest regular file  
-      console.log(`📊 Summary using latest data file: ${latestFile}`)
+
+    if (!dbJobs || dbJobs.length === 0) {
+      console.log(`📊 No data found for ${companyName} in database`)
+      return res.status(200).json({
+        success: true,
+        company: companyName,
+        dataSource: 'database',
+        timestamp: new Date().toISOString(),
+        message: `No ${companyName} jobs found in database`,
+        filepath: 'Database (empty)',
+        summary: {
+          total_jobs: 0,
+          jobs_with_salary: 0,
+          highest_paying_jobs: [],
+          most_common_skills: []
+        }
+      })
     }
+
+    console.log(`📊 Using database data for ${companyName}: ${dbJobs.length} jobs`)
     
-    const filepath = path.join(dataDir, latestFile)
-    const data = JSON.parse(fs.readFileSync(filepath, 'utf8'))
+    // Generate summary from database data
+    const jobsWithSalary = dbJobs.filter(job => job.salary_min || job.salary_max).length
     
-    // Generate fresh summary statistics
-    const jobsWithSalary = data.jobs.filter((job: Job) => job.salary_min || job.salary_max).length
-    
-    const highestPayingJobs = data.jobs
-      .filter((job: Job) => job.salary_max)
-      .sort((a: Job, b: Job) => (b.salary_max || 0) - (a.salary_max || 0))
+    const highestPayingJobs = dbJobs
+      .filter(job => job.salary_max)
+      .sort((a, b) => (b.salary_max || 0) - (a.salary_max || 0))
       .slice(0, 20)
     
     // Generate skill statistics
     const skillCounts: { [key: string]: number } = {}
-    data.jobs.forEach((job: Job) => {
-      job.skills?.forEach(skill => {
-        skillCounts[skill] = (skillCounts[skill] || 0) + 1
-      })
+    dbJobs.forEach(job => {
+      if (job.skills && Array.isArray(job.skills)) {
+        job.skills.forEach((skill: string) => {
+          skillCounts[skill] = (skillCounts[skill] || 0) + 1
+        })
+      }
     })
     
     const mostCommonSkills = Object.entries(skillCounts)
@@ -83,10 +96,13 @@ export default async function handler(
     
     const summary = {
       success: true,
-      dataSource: latestFile,
+      company: companyName,
+      dataSource: 'database',
       timestamp: new Date().toISOString(),
+      message: `Analysis complete for ${companyName}`,
+      filepath: 'Database records',
       summary: {
-        total_jobs: data.jobs.length,
+        total_jobs: dbJobs.length,
         jobs_with_salary: jobsWithSalary,
         highest_paying_jobs: highestPayingJobs,
         most_common_skills: mostCommonSkills

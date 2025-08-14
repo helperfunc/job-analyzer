@@ -30,24 +30,24 @@ export default function Navigation() {
                 Home
               </Link>
               <Link
-                href="/compare"
+                href="/jobs"
                 className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${
-                  isActive('/compare') 
+                  isActive('/jobs') 
+                    ? 'border-blue-500 text-gray-900' 
+                    : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
+                }`}
+              >
+                Jobs
+              </Link>
+              <Link
+                href="/compare-v2"
+                className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${
+                  isActive('/compare-v2') 
                     ? 'border-blue-500 text-gray-900' 
                     : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
                 }`}
               >
                 Compare
-              </Link>
-              <Link
-                href="/skill-jobs"
-                className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${
-                  isActive('/skill-jobs') 
-                    ? 'border-blue-500 text-gray-900' 
-                    : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
-                }`}
-              >
-                Skills
               </Link>
               <Link
                 href="/research"
@@ -58,6 +58,16 @@ export default function Navigation() {
                 }`}
               >
                 Research
+              </Link>
+              <Link
+                href="/resources"
+                className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${
+                  isActive('/resources') 
+                    ? 'border-blue-500 text-gray-900' 
+                    : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
+                }`}
+              >
+                Resources
               </Link>
               <Link
                 href="/guide"

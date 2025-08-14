@@ -5,128 +5,173 @@ export default function Guide() {
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-4xl mx-auto p-6">
-        <h1 className="text-3xl font-bold mb-8">Job Search Assistant 使用指南</h1>
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold mb-4">AI Job Analyzer 使用指南</h1>
+          <p className="text-gray-600">
+            欢迎使用AI Job Analyzer！本指南将帮助您充分利用系统的各项功能，提升求职效率。
+          </p>
+        </div>
 
         <div className="grid gap-6">
-          {/* Research Center 指南 */}
+          {/* 首页功能 */}
           <div className="bg-white p-6 rounded-lg shadow-sm border">
-            <h2 className="text-2xl font-semibold mb-4">🎓 Research Center</h2>
-            
-            <div className="space-y-6">
-              <div>
-                <h3 className="text-lg font-semibold text-blue-600 mb-2">📚 Papers & Research</h3>
-                <ul className="list-disc pl-6 space-y-1 text-sm text-gray-700">
-                  <li><strong>抓取论文</strong>: 点击"Fetch OpenAI Papers"或"Fetch Anthropic Papers"获取最新论文</li>
-                  <li><strong>筛选功能</strong>: 按公司、年份、标签或搜索关键词过滤论文</li>
-                  <li><strong>关联职位</strong>: 点击"Link to Job"将论文与特定职位建立关联</li>
-                  <li><strong>查看详情</strong>: 点击论文链接查看原文或arXiv页面</li>
-                  <li><strong>删除论文</strong>: 点击红色"Delete"按钮删除不需要的论文</li>
-                </ul>
-              </div>
-
-              <div>
-                <h3 className="text-lg font-semibold text-green-600 mb-2">💡 My Insights</h3>
-                <ul className="list-disc pl-6 space-y-1 text-sm text-gray-700">
-                  <li><strong>Note</strong>: 记录对职位的一般性想法和理解</li>
-                  <li><strong>Resource</strong>: 保存有用的学习资源链接</li>
-                  <li><strong>Experience</strong>: 分享相关的工作或项目经验</li>
-                  <li><strong>使用场景</strong>: 记录面试准备要点、技术要求理解等</li>
-                </ul>
-              </div>
-
-              <div>
-                <h3 className="text-lg font-semibold text-purple-600 mb-2">🎯 Skill Gap Analysis</h3>
-                <ul className="list-disc pl-6 space-y-1 text-sm text-gray-700">
-                  <li><strong>输入技能</strong>: 用逗号分隔你的技能，如"Python, React, Machine Learning"</li>
-                  <li><strong>AI分析</strong>: 系统自动比较你的技能与职位要求</li>
-                  <li><strong>查看结果</strong>: 了解技能匹配百分比和缺失技能</li>
-                  <li><strong>学习建议</strong>: 获得针对性的学习建议和优先级</li>
-                </ul>
-              </div>
-
-              <div>
-                <h3 className="text-lg font-semibold text-orange-600 mb-2">🛠 Job Resources</h3>
-                <ul className="list-disc pl-6 space-y-1 text-sm text-gray-700">
-                  <li><strong>资源类型</strong>: 支持视频、文章、工具、课程、书籍等</li>
-                  <li><strong>评分系统</strong>: 为每个资源打分(1-5星)</li>
-                  <li><strong>个人笔记</strong>: 记录使用心得和评价</li>
-                  <li><strong>标签管理</strong>: 通过标签组织和分类资源</li>
-                </ul>
-              </div>
-            </div>
-          </div>
-
-          {/* 使用流程指南 */}
-          <div className="bg-white p-6 rounded-lg shadow-sm border">
-            <h2 className="text-2xl font-semibold mb-4">🚀 推荐使用流程</h2>
+            <h2 className="text-2xl font-semibold mb-4 flex items-center">
+              🏠 <span className="ml-2">首页 - 职位分析</span>
+            </h2>
             
             <div className="space-y-4">
-              <div className="flex items-start space-x-3">
-                <span className="flex-shrink-0 w-6 h-6 bg-blue-600 text-white rounded-full flex items-center justify-center text-sm font-bold">1</span>
-                <div>
-                  <h4 className="font-semibold">研究目标公司</h4>
-                  <p className="text-sm text-gray-600">抓取OpenAI/Anthropic的最新论文，了解公司技术方向和研究重点</p>
-                </div>
+              <div className="bg-blue-50 p-4 rounded-lg">
+                <h3 className="text-lg font-semibold text-blue-600 mb-2">快速开始</h3>
+                <ul className="list-disc pl-6 space-y-1 text-sm text-gray-700">
+                  <li><strong>选择公司</strong>: 点击"OpenAI"或"Anthropic"按钮快速分析对应公司职位</li>
+                  <li><strong>自定义爬取</strong>: 输入任何公司的招聘页面URL，支持大多数主流招聘网站</li>
+                  <li><strong>职位统计</strong>: 查看职位总数、有薪资数据的职位数量</li>
+                  <li><strong>薪资分析</strong>: 浏览薪资最高的职位列表</li>
+                  <li><strong>技能统计</strong>: 了解最常见的技能要求</li>
+                </ul>
               </div>
               
-              <div className="flex items-start space-x-3">
-                <span className="flex-shrink-0 w-6 h-6 bg-blue-600 text-white rounded-full flex items-center justify-center text-sm font-bold">2</span>
-                <div>
-                  <h4 className="font-semibold">分析技能差距</h4>
-                  <p className="text-sm text-gray-600">使用AI分析你的技能与目标职位的差距，制定学习计划</p>
-                </div>
-              </div>
-              
-              <div className="flex items-start space-x-3">
-                <span className="flex-shrink-0 w-6 h-6 bg-blue-600 text-white rounded-full flex items-center justify-center text-sm font-bold">3</span>
-                <div>
-                  <h4 className="font-semibold">收集学习资源</h4>
-                  <p className="text-sm text-gray-600">在Job Resources中保存相关的学习材料和工具</p>
-                </div>
-              </div>
-              
-              <div className="flex items-start space-x-3">
-                <span className="flex-shrink-0 w-6 h-6 bg-blue-600 text-white rounded-full flex items-center justify-center text-sm font-bold">4</span>
-                <div>
-                  <h4 className="font-semibold">记录学习心得</h4>
-                  <p className="text-sm text-gray-600">用My Insights记录学习进度、面试准备要点和个人想法</p>
-                </div>
-              </div>
-              
-              <div className="flex items-start space-x-3">
-                <span className="flex-shrink-0 w-6 h-6 bg-blue-600 text-white rounded-full flex items-center justify-center text-sm font-bold">5</span>
-                <div>
-                  <h4 className="font-semibold">建立知识关联</h4>
-                  <p className="text-sm text-gray-600">将重要论文与目标职位关联，准备面试时的技术讨论</p>
-                </div>
+              <div className="bg-green-50 p-4 rounded-lg">
+                <h3 className="text-lg font-semibold text-green-600 mb-2">数据管理</h3>
+                <ul className="list-disc pl-6 space-y-1 text-sm text-gray-700">
+                  <li><strong>自动导入</strong>: 分析结果自动保存到数据库</li>
+                  <li><strong>清除数据</strong>: 使用"🗑️ 清除所有数据"按钮清空数据库</li>
+                  <li><strong>数据持久化</strong>: 所有数据存储在数据库中，刷新不丢失</li>
+                </ul>
               </div>
             </div>
           </div>
 
-          {/* 技巧和最佳实践 */}
+          {/* Jobs页面 */}
           <div className="bg-white p-6 rounded-lg shadow-sm border">
-            <h2 className="text-2xl font-semibold mb-4">💡 使用技巧</h2>
+            <h2 className="text-2xl font-semibold mb-4 flex items-center">
+              📋 <span className="ml-2">Jobs - 职位管理</span>
+            </h2>
             
-            <div className="grid md:grid-cols-2 gap-6">
+            <div className="space-y-4">
+              <div className="bg-purple-50 p-4 rounded-lg">
+                <h3 className="text-lg font-semibold text-purple-600 mb-2">职位浏览与排序</h3>
+                <ul className="list-disc pl-6 space-y-1 text-sm text-gray-700">
+                  <li><strong>智能排序</strong>: 默认按薪资从高到低排序，同薪资按创建时间排序</li>
+                  <li><strong>多种排序</strong>: 支持按薪资高低、创建时间等多种排序方式</li>
+                  <li><strong>高级筛选</strong>: 按公司、部门、薪资范围筛选职位</li>
+                  <li><strong>分页显示</strong>: 支持分页浏览，提升加载速度</li>
+                </ul>
+              </div>
+              
+              <div className="bg-orange-50 p-4 rounded-lg">
+                <h3 className="text-lg font-semibold text-orange-600 mb-2">职位详情</h3>
+                <ul className="list-disc pl-6 space-y-1 text-sm text-gray-700">
+                  <li><strong>详细信息</strong>: 查看职位标题、公司、地点、薪资、技能要求</li>
+                  <li><strong>薪资显示</strong>: 清晰展示薪资范围和格式化显示</li>
+                  <li><strong>技能标签</strong>: 可点击技能标签查看相关职位</li>
+                  <li><strong>原始链接</strong>: 直接跳转到公司官网职位页面</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          {/* Research Center */}
+          <div className="bg-white p-6 rounded-lg shadow-sm border">
+            <h2 className="text-2xl font-semibold mb-4 flex items-center">
+              🔬 <span className="ml-2">Research Center - 论文研究</span>
+            </h2>
+            
+            <div className="space-y-4">
+              <div className="bg-blue-50 p-4 rounded-lg">
+                <h3 className="text-lg font-semibold text-blue-600 mb-2">📚 Papers & Research</h3>
+                <ul className="list-disc pl-6 space-y-1 text-sm text-gray-700">
+                  <li><strong>论文爬取</strong>: 一键获取OpenAI和Anthropic的最新研究论文</li>
+                  <li><strong>智能筛选</strong>: 按公司、年份、关键词搜索论文</li>
+                  <li><strong>职位关联</strong>: 将论文与相关职位建立联系，便于研究</li>
+                  <li><strong>多链接支持</strong>: 查看原文、arXiv、GitHub等多个链接</li>
+                  <li><strong>批量管理</strong>: 支持删除单个论文或清空所有论文</li>
+                </ul>
+              </div>
+
+              <div className="bg-green-50 p-4 rounded-lg">
+                <h3 className="text-lg font-semibold text-green-600 mb-2">🔗 职位关联功能</h3>
+                <ul className="list-disc pl-6 space-y-1 text-sm text-gray-700">
+                  <li><strong>双向关联</strong>: 从论文页面链接到职位，从职位页面链接到论文</li>
+                  <li><strong>相关性评估</strong>: 系统自动评估论文与职位的相关程度</li>
+                  <li><strong>便捷管理</strong>: 可随时解除或建立新的关联关系</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          {/* Resources系统 */}
+          <div className="bg-white p-6 rounded-lg shadow-sm border">
+            <h2 className="text-2xl font-semibold mb-4 flex items-center">
+              📚 <span className="ml-2">Resources - 资源管理</span>
+            </h2>
+            
+            <div className="space-y-4">
+              <div className="bg-green-50 p-4 rounded-lg">
+                <h3 className="text-lg font-semibold text-green-600 mb-2">🎯 统一资源系统</h3>
+                <ul className="list-disc pl-6 space-y-1 text-sm text-gray-700">
+                  <li><strong>多类型支持</strong>: 课程、书籍、视频、文章、工具、面试准备等10种类型</li>
+                  <li><strong>职位关联</strong>: 直接在职位详情页面创建和链接资源</li>
+                  <li><strong>灵活管理</strong>: 可创建独立资源，也可链接到特定职位</li>
+                  <li><strong>标签系统</strong>: 为资源添加标签便于分类和搜索</li>
+                </ul>
+              </div>
+
+              <div className="bg-blue-50 p-4 rounded-lg">
+                <h3 className="text-lg font-semibold text-blue-600 mb-2">💼 在职位页面使用</h3>
+                <ul className="list-disc pl-6 space-y-1 text-sm text-gray-700">
+                  <li><strong>创建资源</strong>: 点击"+ Create Resource"直接为职位创建资源</li>
+                  <li><strong>链接现有资源</strong>: 使用"+ Link Existing"关联已有资源</li>
+                  <li><strong>资源展示</strong>: 查看所有链接到该职位的学习材料</li>
+                  <li><strong>快速访问</strong>: 一键访问资源URL或查看详细描述</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          {/* 比较分析 */}
+          <div className="bg-white p-6 rounded-lg shadow-sm border">
+            <h2 className="text-2xl font-semibold mb-4 flex items-center">
+              🔥 <span className="ml-2">Compare - 对比分析</span>
+            </h2>
+            
+            <div className="space-y-4">
+              <div className="bg-purple-50 p-4 rounded-lg">
+                <h3 className="text-lg font-semibold text-purple-600 mb-2">🏢 公司对比</h3>
+                <ul className="list-disc pl-6 space-y-1 text-sm text-gray-700">
+                  <li><strong>全面对比</strong>: OpenAI vs Anthropic 薪资、职位、技能要求对比</li>
+                  <li><strong>薪资分析</strong>: 对比两家公司的薪资水平和分布</li>
+                  <li><strong>技能需求</strong>: 分析共同技能和独有技能要求</li>
+                  <li><strong>职位分析</strong>: 对比职位类别和招聘重点</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          {/* 使用技巧 */}
+          <div className="bg-gradient-to-r from-blue-50 to-purple-50 p-6 rounded-lg shadow-sm border border-blue-200">
+            <h2 className="text-2xl font-semibold mb-4 flex items-center">
+              💡 <span className="ml-2">使用技巧与最佳实践</span>
+            </h2>
+            
+            <div className="grid md:grid-cols-2 gap-4">
               <div>
-                <h3 className="font-semibold text-green-600 mb-2">✅ 最佳实践</h3>
-                <ul className="list-disc pl-5 space-y-1 text-sm text-gray-700">
-                  <li>定期更新论文库，跟上最新研究</li>
-                  <li>为每个目标职位单独做技能分析</li>
-                  <li>及时记录学习心得和面试准备要点</li>
-                  <li>使用筛选功能快速找到相关论文</li>
-                  <li>建立系统的资源收藏和标签体系</li>
+                <h3 className="text-lg font-semibold text-blue-600 mb-2">⚡ 效率提升</h3>
+                <ul className="list-disc pl-6 space-y-1 text-sm text-gray-700">
+                  <li>使用快速公司按钮获取数据，避免重复输入URL</li>
+                  <li>利用薪资排序快速找到高薪职位</li>
+                  <li>通过技能标签探索相关职位机会</li>
+                  <li>建立论文与职位的关联便于深入研究</li>
                 </ul>
               </div>
               
               <div>
-                <h3 className="font-semibold text-red-600 mb-2">⚠️ 注意事项</h3>
-                <ul className="list-disc pl-5 space-y-1 text-sm text-gray-700">
-                  <li>删除论文操作不可撤销，请谨慎操作</li>
-                  <li>技能分析需要OpenAI API配置</li>
-                  <li>部分功能需要Supabase数据库支持</li>
-                  <li>建议定期备份重要的见解和笔记</li>
-                  <li>合理使用AI分析，结合实际情况判断</li>
+                <h3 className="text-lg font-semibold text-purple-600 mb-2">🎯 求职策略</h3>
+                <ul className="list-disc pl-6 space-y-1 text-sm text-gray-700">
+                  <li>为目标职位创建专门的学习资源库</li>
+                  <li>研究公司最新论文了解技术方向</li>
+                  <li>利用对比功能制定求职优先级</li>
+                  <li>定期清理和更新职位数据保持时效性</li>
                 </ul>
               </div>
             </div>
@@ -134,23 +179,68 @@ export default function Guide() {
 
           {/* 快速导航 */}
           <div className="bg-white p-6 rounded-lg shadow-sm border">
-            <h2 className="text-2xl font-semibold mb-4">🔗 快速导航</h2>
+            <h2 className="text-2xl font-semibold mb-4 flex items-center">
+              🚀 <span className="ml-2">快速导航</span>
+            </h2>
             
-            <div className="grid md:grid-cols-3 gap-4">
-              <Link href="/research" className="block p-4 border rounded-lg hover:bg-gray-50 transition-colors">
-                <h3 className="font-semibold text-blue-600">Research Center</h3>
-                <p className="text-sm text-gray-600 mt-1">论文研究和技能分析</p>
+            <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <Link href="/" className="bg-blue-100 hover:bg-blue-200 p-4 rounded-lg text-center transition-colors">
+                <div className="text-2xl mb-2">🏠</div>
+                <div className="font-semibold text-blue-800">首页</div>
+                <div className="text-xs text-blue-600">职位分析</div>
               </Link>
               
-              <Link href="/" className="block p-4 border rounded-lg hover:bg-gray-50 transition-colors">
-                <h3 className="font-semibold text-green-600">Job Analysis</h3>
-                <p className="text-sm text-gray-600 mt-1">职位抓取和薪资分析</p>
+              <Link href="/jobs" className="bg-green-100 hover:bg-green-200 p-4 rounded-lg text-center transition-colors">
+                <div className="text-2xl mb-2">📋</div>
+                <div className="font-semibold text-green-800">Jobs</div>
+                <div className="text-xs text-green-600">职位浏览</div>
               </Link>
               
-              <Link href="/compare" className="block p-4 border rounded-lg hover:bg-gray-50 transition-colors">
-                <h3 className="font-semibold text-purple-600">Company Compare</h3>
-                <p className="text-sm text-gray-600 mt-1">公司职位对比</p>
+              <Link href="/research" className="bg-purple-100 hover:bg-purple-200 p-4 rounded-lg text-center transition-colors">
+                <div className="text-2xl mb-2">🔬</div>
+                <div className="font-semibold text-purple-800">Research</div>
+                <div className="text-xs text-purple-600">论文研究</div>
               </Link>
+              
+              <Link href="/resources" className="bg-orange-100 hover:bg-orange-200 p-4 rounded-lg text-center transition-colors">
+                <div className="text-2xl mb-2">📚</div>
+                <div className="font-semibold text-orange-800">Resources</div>
+                <div className="text-xs text-orange-600">资源管理</div>
+              </Link>
+            </div>
+          </div>
+
+          {/* 系统信息 */}
+          <div className="bg-gray-50 p-6 rounded-lg border">
+            <h2 className="text-xl font-semibold mb-4 text-gray-700">📋 系统信息</h2>
+            <div className="grid md:grid-cols-3 gap-4 text-sm">
+              <div>
+                <h3 className="font-semibold text-gray-600 mb-2">技术栈</h3>
+                <ul className="list-disc pl-4 space-y-1 text-gray-600">
+                  <li>Next.js 14</li>
+                  <li>TypeScript</li>
+                  <li>Supabase (PostgreSQL)</li>
+                  <li>Tailwind CSS</li>
+                </ul>
+              </div>
+              <div>
+                <h3 className="font-semibold text-gray-600 mb-2">核心功能</h3>
+                <ul className="list-disc pl-4 space-y-1 text-gray-600">
+                  <li>智能职位爬取</li>
+                  <li>薪资分析排序</li>
+                  <li>论文研究关联</li>
+                  <li>资源管理系统</li>
+                </ul>
+              </div>
+              <div>
+                <h3 className="font-semibold text-gray-600 mb-2">数据支持</h3>
+                <ul className="list-disc pl-4 space-y-1 text-gray-600">
+                  <li>OpenAI Jobs</li>
+                  <li>Anthropic Jobs</li>
+                  <li>研究论文库</li>
+                  <li>学习资源库</li>
+                </ul>
+              </div>
             </div>
           </div>
         </div>

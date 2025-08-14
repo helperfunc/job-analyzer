@@ -27,7 +27,6 @@ export default async function handler(
     const { data: jobs, error } = await supabase
       .from('jobs')
       .select('*')
-      .order('created_at', { ascending: false })
 
     if (error) {
       // If jobs table doesn't exist, return empty array

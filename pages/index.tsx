@@ -36,6 +36,7 @@ export default function Home() {
   const [error, setError] = useState('')
   const [mounted, setMounted] = useState(false) // Track if component is mounted
   const [jobIdMap, setJobIdMap] = useState<Record<string, string>>({}) // Map job keys to UUIDs
+  const [navigating, setNavigating] = useState(false) // Track navigation state
 
   // Generate a UUID v4-like ID
   const generateUUID = (): string => {
@@ -59,8 +60,22 @@ export default function Home() {
 
   // Auto-import jobs to database when result is loaded
   const autoImportJobs = async (resultData: ScrapeResult) => {
+    // Only auto-import if we don't have any data in the database yet
+    if (!resultData || !resultData.summary || !resultData.summary.highest_paying_jobs) {
+      return
+    }
+    
     try {
-      console.log('🔄 Auto-importing jobs to database...')
+      // Check if we already have jobs in database
+      const dbCheckResponse = await fetch('/api/jobs')
+      const dbCheckData = await dbCheckResponse.json()
+      
+      if (dbCheckData.success && dbCheckData.jobs && dbCheckData.jobs.length > 0) {
+        console.log('📋 Database already contains jobs, skipping auto-import')
+        return
+      }
+      
+      console.log('🔄 Database is empty, auto-importing jobs...')
       
       const currentCompany = url.includes('anthropic.com') ? 'anthropic' : 'openai'
       const jobs = resultData.summary.highest_paying_jobs.map((job, index) => ({
@@ -84,10 +99,9 @@ export default function Home() {
       })
 
       const importResult = await importResponse.json()
-      if (importResult.success) {
-        console.log(`✅ Auto-imported ${importResult.count} jobs to database`)
-      } else {
-        console.log(`⚠️ Jobs import info: ${importResult.message}`)
+      console.log(`📊 Import result: ${importResult.message}`)
+      if (importResult.count > 0) {
+        console.log(`✅ Auto-imported ${importResult.count} new jobs to database`)
       }
     } catch (err) {
       console.log('⚠️ Auto-import failed (non-critical):', err)
@@ -99,26 +113,85 @@ export default function Home() {
     setMounted(true)
   }, [])
 
-  // Load latest results after component is mounted
+  // Handle router events for navigation loading
+  useEffect(() => {
+    const handleStart = (url: string) => {
+      if (url !== router.asPath) {
+        setNavigating(true)
+      }
+    }
+    
+    const handleComplete = () => {
+      setNavigating(false)
+    }
+
+    router.events.on('routeChangeStart', handleStart)
+    router.events.on('routeChangeComplete', handleComplete)
+    router.events.on('routeChangeError', handleComplete)
+
+    return () => {
+      router.events.off('routeChangeStart', handleStart)
+      router.events.off('routeChangeComplete', handleComplete)
+      router.events.off('routeChangeError', handleComplete)
+    }
+  }, [router])
+
+  // Reload data when page gains focus (user returns to tab/window)
+  useEffect(() => {
+    const handleFocus = () => {
+      if (mounted && !result) {
+        // Trigger data reload by changing URL state
+        const currentCompany = url.includes('anthropic.com') ? 'anthropic' : 'openai'
+        loadCompanyData(url)
+      }
+    }
+
+    window.addEventListener('focus', handleFocus)
+    
+    // Also handle visibility change
+    const handleVisibilityChange = () => {
+      if (!document.hidden && mounted && !result) {
+        const currentCompany = url.includes('anthropic.com') ? 'anthropic' : 'openai'
+        loadCompanyData(url)
+      }
+    }
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    
+    return () => {
+      window.removeEventListener('focus', handleFocus)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
+  }, [mounted, result, url])
+
+  // Load latest results when component is mounted or when returning to page
   useEffect(() => {
     if (!mounted) return
     
-    // Clear any old cached data first
-    localStorage.removeItem('openai-jobs-analysis-result')
-    localStorage.removeItem('anthropic-jobs-analysis-result')
-    
-    // Always load fresh data on mount
-    const loadLatestData = async () => {
-      setInitialLoading(true)
-      setResult(null) // Ensure no old data is shown
-      
-      // Determine which company data to load based on current URL
+    const loadData = async () => {
+      // Check localStorage first
       const currentCompany = url.includes('anthropic.com') ? 'anthropic' : 'openai'
+      const cachedData = localStorage.getItem(`${currentCompany}-jobs-analysis-result`)
+      
+      if (cachedData) {
+        try {
+          const data = JSON.parse(cachedData)
+          setResult(data)
+          setInitialLoading(false)
+          return
+        } catch (e) {
+          console.error('Failed to parse cached data:', e)
+        }
+      }
+      
+      // If no cached data or parse failed, load from API
+      setInitialLoading(true)
+      setResult(null)
       
       try {
         const res = await fetch(`/api/get-summary?company=${currentCompany}&_t=${Date.now()}`, {
           method: 'GET',
-          cache: 'no-cache', // Prevent browser caching
+          cache: 'no-cache',
           headers: {
             'Cache-Control': 'no-cache, no-store, must-revalidate',
             'Pragma': 'no-cache',
@@ -128,27 +201,29 @@ export default function Home() {
         
         if (res.ok) {
           const data = await res.json()
-          console.log(`🔍 Fresh API response for ${currentCompany} - ML jobs:`, data.summary?.most_common_skills?.find(s => s.skill === 'Machine Learning')?.count)
-          console.log('🔍 Data source file:', data.dataSource)
-          console.log('🔍 Timestamp:', data.timestamp)
-          setResult(data)
-          // Update localStorage with fresh data
-          localStorage.setItem(`${currentCompany}-jobs-analysis-result`, JSON.stringify(data))
-          
-          // Auto-import jobs to database
-          autoImportJobs(data)
+          if (data.summary?.total_jobs > 0) {
+            console.log(`🔍 Loaded ${currentCompany} data:`, data.summary?.total_jobs, 'jobs')
+            setResult(data)
+            localStorage.setItem(`${currentCompany}-jobs-analysis-result`, JSON.stringify(data))
+          } else {
+            console.log(`📋 No ${currentCompany} data available`)
+            setResult(null)
+          }
         } else {
           console.error('Failed to load summary:', res.status)
+          setResult(null)
         }
       } catch (err) {
         console.error('Error loading data:', err)
+        setResult(null)
       } finally {
         setInitialLoading(false)
       }
     }
     
-    loadLatestData()
-  }, [mounted, url]) // Add url as dependency
+    // Always load data when component mounts or when URL changes
+    loadData()
+  }, [mounted, url])
 
   const scrapeJobs = async () => {
     if (!url) return
@@ -183,22 +258,59 @@ export default function Home() {
     }
   }
 
-  const clearResults = () => {
-    setResult(null)
-    setError('')
-    localStorage.removeItem('openai-jobs-analysis-result')
-    localStorage.removeItem('anthropic-jobs-analysis-result')
+
+  const clearResults = async () => {
+    const confirmed = confirm('⚠️ 确定要清除所有结果和数据库中的工作数据吗？\n\n这将：\n- 清除当前显示结果\n- 删除数据库中所有工作记录\n- 清除本地缓存\n\n此操作不可撤销！')
+    
+    if (!confirmed) return
+
+    try {
+      setLoading(true)
+      
+      // Clear database
+      const response = await fetch('/api/jobs/clear-all', {
+        method: 'DELETE'
+      })
+      
+      const data = await response.json()
+      
+      if (data.success) {
+        // Clear UI state
+        setResult(null)
+        setError('')
+        
+        // Clear localStorage
+        localStorage.removeItem('openai-jobs-analysis-result')
+        localStorage.removeItem('anthropic-jobs-analysis-result')
+        
+        alert(`✅ ${data.message}`)
+      } else {
+        alert(`❌ 清除数据库失败: ${data.error}`)
+      }
+    } catch (error) {
+      console.error('Error clearing results:', error)
+      alert('❌ 清除数据库时发生网络错误')
+    } finally {
+      setLoading(false)
+    }
   }
 
-  const refreshStats = async () => {
+  // Load data for specific company when user clicks company buttons
+  const loadCompanyData = async (companyUrl: string) => {
     setLoading(true)
     setError('')
     
-    const currentCompany = url.includes('anthropic.com') ? 'anthropic' : 'openai'
+    const currentCompany = companyUrl.includes('anthropic.com') ? 'anthropic' : 'openai'
     
     try {
-      const res = await fetch(`/api/get-summary?company=${currentCompany}`, {
+      const res = await fetch(`/api/get-summary?company=${currentCompany}&_t=${Date.now()}`, {
         method: 'GET',
+        cache: 'no-cache',
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0'
+        }
       })
 
       if (!res.ok) {
@@ -206,9 +318,16 @@ export default function Home() {
       }
 
       const data = await res.json()
-      setResult(data)
-      // Save the refreshed results
-      localStorage.setItem(`${currentCompany}-jobs-analysis-result`, JSON.stringify(data))
+      if (data.summary?.total_jobs > 0) {
+        console.log(`🔍 Loaded ${currentCompany} data:`, data.summary?.total_jobs, 'jobs from ${data.dataSource}')
+        setResult(data)
+        localStorage.setItem(`${currentCompany}-jobs-analysis-result`, JSON.stringify(data))
+      } else {
+        console.log(`📋 No ${currentCompany} data available in database or files`)
+        setResult(null)
+        // Clear localStorage if no data available
+        localStorage.removeItem(`${currentCompany}-jobs-analysis-result`)
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : '获取统计失败，请重试')
     } finally {
@@ -216,8 +335,27 @@ export default function Home() {
     }
   }
 
+  const refreshStats = async () => {
+    await loadCompanyData(url)
+  }
+
+  const navigateWithLoading = (path: string) => {
+    setNavigating(true)
+    router.push(path)
+  }
+
   return (
     <div className="min-h-screen bg-gray-50">
+      {/* Navigation Loading Overlay */}
+      {navigating && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
+          <div className="bg-white rounded-lg p-6 flex flex-col items-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
+            <p className="text-gray-700 font-medium">Loading page...</p>
+          </div>
+        </div>
+      )}
+      
       <div className="max-w-4xl mx-auto p-8">
         <h1 className="text-3xl font-bold mb-2 text-gray-900">
           AI 公司职位分析器
@@ -238,8 +376,13 @@ export default function Home() {
           {/* Quick company selection */}
           <div className="flex gap-2 justify-center">
             <button
-              onClick={() => setUrl('https://openai.com/careers/search/')}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+              onClick={() => {
+                const newUrl = 'https://openai.com/careers/search/'
+                setUrl(newUrl)
+                loadCompanyData(newUrl)
+              }}
+              disabled={loading}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
                 url.includes('openai.com') 
                   ? 'bg-blue-100 text-blue-700 border border-blue-300' 
                   : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
@@ -248,8 +391,13 @@ export default function Home() {
               OpenAI
             </button>
             <button
-              onClick={() => setUrl('https://www.anthropic.com/jobs')}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+              onClick={() => {
+                const newUrl = 'https://www.anthropic.com/jobs'
+                setUrl(newUrl)
+                loadCompanyData(newUrl)
+              }}
+              disabled={loading}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
                 url.includes('anthropic.com') 
                   ? 'bg-purple-100 text-purple-700 border border-purple-300' 
                   : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
@@ -271,27 +419,39 @@ export default function Home() {
               <>
                 <button
                   onClick={clearResults}
-                  className="bg-gray-500 text-white px-4 py-3 rounded-lg hover:bg-gray-600 transition-colors"
+                  disabled={loading}
+                  className="bg-red-500 text-white px-4 py-3 rounded-lg hover:bg-red-600 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+                  title="清除显示结果和数据库中的所有工作数据"
                 >
-                  清除结果
+                  {loading ? '🗑️ 清除中...' : '🗑️ 清除所有数据'}
                 </button>
                 <button
-                  onClick={() => router.push('/jobs')}
-                  className="bg-green-600 text-white px-4 py-3 rounded-lg hover:bg-green-700 transition-colors font-medium"
+                  onClick={() => navigateWithLoading('/jobs')}
+                  disabled={navigating}
+                  className="bg-green-600 text-white px-4 py-3 rounded-lg hover:bg-green-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  📋 Jobs
+                  {navigating ? '⏳ Loading...' : '📋 Jobs'}
                 </button>
                 <button
-                  onClick={() => router.push('/research')}
-                  className="bg-purple-600 text-white px-4 py-3 rounded-lg hover:bg-purple-700 transition-colors font-medium"
+                  onClick={() => navigateWithLoading('/research')}
+                  disabled={navigating}
+                  className="bg-purple-600 text-white px-4 py-3 rounded-lg hover:bg-purple-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  🔬 Research
+                  {navigating ? '⏳ Loading...' : '🔬 Research'}
                 </button>
                 <button
-                  onClick={() => router.push('/compare')}
-                  className="bg-gradient-to-r from-blue-500 to-purple-500 text-white px-4 py-3 rounded-lg hover:from-blue-600 hover:to-purple-600 transition-colors font-medium"
+                  onClick={() => navigateWithLoading('/resources')}
+                  disabled={navigating}
+                  className="bg-orange-600 text-white px-4 py-3 rounded-lg hover:bg-orange-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  🔥 对比分析
+                  {navigating ? '⏳ Loading...' : '📚 Resources'}
+                </button>
+                <button
+                  onClick={() => navigateWithLoading('/compare-v2')}
+                  disabled={navigating}
+                  className="bg-gradient-to-r from-blue-500 to-purple-500 text-white px-4 py-3 rounded-lg hover:from-blue-600 hover:to-purple-600 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {navigating ? '⏳ Loading...' : '🔥 对比分析'}
                 </button>
               </>
             )}
@@ -443,7 +603,53 @@ export default function Home() {
               </div>
             </div>
           </div>
-        ) : null}
+        ) : (
+          <div className="text-center py-20">
+            <div className="mb-8">
+              <div className="text-6xl mb-4">📋</div>
+              <h2 className="text-2xl font-bold text-gray-700 mb-2">暂无工作数据</h2>
+              <p className="text-gray-600 mb-6">
+                数据库中没有找到工作数据。你可以：
+              </p>
+              <div className="space-y-4 max-w-md mx-auto">
+                <button
+                  onClick={scrapeJobs}
+                  disabled={loading || !url}
+                  className="w-full bg-blue-500 text-white p-3 rounded-lg hover:bg-blue-600 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+                >
+                  {loading ? '分析中...' : '🔍 爬取最新职位数据'}
+                </button>
+                <div className="text-sm text-gray-500">
+                  或选择公司快速开始分析：
+                </div>
+                <div className="flex gap-2 justify-center">
+                  <button
+                    onClick={() => {
+                      const newUrl = 'https://openai.com/careers/search/'
+                      setUrl(newUrl)
+                      loadCompanyData(newUrl)
+                    }}
+                    disabled={loading}
+                    className="px-4 py-2 rounded-lg text-sm font-medium bg-blue-100 text-blue-700 border border-blue-300 hover:bg-blue-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  >
+                    分析 OpenAI 职位
+                  </button>
+                  <button
+                    onClick={() => {
+                      const newUrl = 'https://www.anthropic.com/jobs'
+                      setUrl(newUrl)
+                      loadCompanyData(newUrl)
+                    }}
+                    disabled={loading}
+                    className="px-4 py-2 rounded-lg text-sm font-medium bg-purple-100 text-purple-700 border border-purple-300 hover:bg-purple-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  >
+                    分析 Anthropic 职位
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         <div className="mt-12 text-center text-sm text-gray-500">
           <p>爬取的数据会保存在项目的 data/ 目录下</p>

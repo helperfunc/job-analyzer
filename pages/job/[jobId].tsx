@@ -29,15 +29,23 @@ interface Paper {
   tags: string[]
 }
 
-interface InterviewResource {
+interface JobResource {
   id: string
-  job_id: string
+  job_id?: string
+  user_id: string
   title: string
   url?: string
-  resource_type: 'preparation' | 'question' | 'experience' | 'note' | 'other'
-  content: string
-  tags: string[]
+  resource_type: 'course' | 'book' | 'video' | 'article' | 'tool' | 'preparation' | 'question' | 'experience' | 'note' | 'other'
+  description?: string
+  content?: string
+  tags?: string[]
   created_at: string
+  updated_at?: string
+  jobs?: {
+    id: string
+    title: string
+    company: string
+  }
 }
 
 export default function JobDetail() {
@@ -47,17 +55,20 @@ export default function JobDetail() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [relatedPapers, setRelatedPapers] = useState<Paper[]>([])
-  const [interviewResources, setInterviewResources] = useState<InterviewResource[]>([])
+  const [jobResources, setJobResources] = useState<JobResource[]>([])
+  const [allJobResources, setAllJobResources] = useState<JobResource[]>([])
   const [activeTab, setActiveTab] = useState<'info' | 'papers' | 'resources'>('info')
   const [toastMessage, setToastMessage] = useState('')
   const [showToast, setShowToast] = useState(false)
   const [allPapers, setAllPapers] = useState<Paper[]>([])
   const [showAddPaperModal, setShowAddPaperModal] = useState(false)
   const [showAddResourceModal, setShowAddResourceModal] = useState(false)
+  const [showLinkResourceModal, setShowLinkResourceModal] = useState(false)
   const [newResource, setNewResource] = useState({
     title: '',
     url: '',
-    resource_type: 'note' as 'preparation' | 'question' | 'experience' | 'note' | 'other',
+    resource_type: 'note' as JobResource['resource_type'],
+    description: '',
     content: '',
     tags: [] as string[]
   })
@@ -76,12 +87,21 @@ export default function JobDetail() {
   }
 
   useEffect(() => {
-    if (!jobId) return
+    if (!router.isReady) return
+    if (!jobId) {
+      console.error('No jobId provided')
+      setError('No job ID provided')
+      setLoading(false)
+      return
+    }
+    
+    console.log('Loading job details for:', jobId)
     fetchJobDetails()
     fetchRelatedPapers()
-    fetchInterviewResources()
+    fetchJobResources()
     fetchAllPapers()
-  }, [jobId])
+    fetchAllJobResources()
+  }, [router.isReady, jobId])
 
   const fetchJobDetails = async () => {
     setLoading(true)
@@ -139,18 +159,6 @@ export default function JobDetail() {
     }
   }
 
-  const fetchInterviewResources = async () => {
-    if (!jobId) return
-    try {
-      const response = await fetch(`/api/interview-resources?job_id=${jobId}`)
-      const data = await response.json()
-      if (data.success) {
-        setInterviewResources(data.data)
-      }
-    } catch (err) {
-      console.error('Failed to fetch interview resources:', err)
-    }
-  }
 
   const fetchAllPapers = async () => {
     try {
@@ -161,6 +169,31 @@ export default function JobDetail() {
       }
     } catch (err) {
       console.error('Failed to fetch papers:', err)
+    }
+  }
+
+  const fetchJobResources = async () => {
+    if (!jobId) return
+    try {
+      const response = await fetch(`/api/job-resources?job_id=${jobId}`)
+      const data = await response.json()
+      if (data.success) {
+        setJobResources(data.data)
+      }
+    } catch (err) {
+      console.error('Failed to fetch job resources:', err)
+    }
+  }
+
+  const fetchAllJobResources = async () => {
+    try {
+      const response = await fetch('/api/job-resources?user_id=default')
+      const data = await response.json()
+      if (data.success) {
+        setAllJobResources(data.data)
+      }
+    } catch (err) {
+      console.error('Failed to fetch all job resources:', err)
     }
   }
 
@@ -189,25 +222,118 @@ export default function JobDetail() {
     }
   }
 
-  const removeInterviewResource = async (resourceId: string) => {
+  const deletePaper = async (paperId: string, paperTitle: string) => {
+    if (!confirm(`Are you sure you want to permanently delete the paper "${paperTitle}"? This action cannot be undone.`)) {
+      return
+    }
+
     try {
-      const response = await fetch(`/api/interview-resources/${resourceId}`, {
-        method: 'DELETE'
+      const response = await fetch('/api/research/delete-paper', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: paperId })
       })
       const data = await response.json()
       
       if (data.success) {
-        setInterviewResources(prev => prev.filter(resource => resource.id !== resourceId))
-        showToastMessage('🗑️ Interview resource removed')
+        // Remove from both related papers and all papers lists
+        setRelatedPapers(prev => prev.filter(paper => paper.id !== paperId))
+        setAllPapers(prev => prev.filter(paper => paper.id !== paperId))
+        showToastMessage('🗑️ Paper deleted permanently')
       } else {
-        console.error('Failed to remove resource:', data.error)
-        showToastMessage('❌ Failed to remove resource')
+        console.error('Failed to delete paper:', data.error)
+        showToastMessage('❌ Failed to delete paper')
       }
     } catch (err) {
-      console.error('Failed to remove interview resource:', err)
+      console.error('Failed to delete paper:', err)
       showToastMessage('❌ Network error')
     }
   }
+
+  const deleteCurrentJob = async () => {
+    if (!job) return
+
+    if (!confirm(`Are you sure you want to permanently delete the job "${job.title}"? This action cannot be undone and will remove all associated resources and papers.`)) {
+      return
+    }
+
+    try {
+      const response = await fetch(`/api/jobs/${jobId}`, {
+        method: 'DELETE'
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        showToastMessage(`🗑️ Job "${job.title}" deleted successfully`)
+        // Redirect to jobs page after deletion
+        router.push('/jobs')
+      } else {
+        console.error('Failed to delete job:', data.error)
+        showToastMessage('❌ Failed to delete job')
+      }
+    } catch (err) {
+      console.error('Failed to delete job:', err)
+      showToastMessage('❌ Network error occurred')
+    }
+  }
+
+  const linkResourceToJob = async (resourceId: string) => {
+    try {
+      const response = await fetch('/api/job-resources/link-to-job', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          resource_id: resourceId,
+          job_id: jobId
+        })
+      })
+      const data = await response.json()
+      
+      if (data.success) {
+        // Add to job resources and remove from available resources
+        setJobResources(prev => [...prev, data.data])
+        setAllJobResources(prev => prev.filter(resource => resource.id !== resourceId))
+        showToastMessage(`✅ Resource "${data.data.title}" linked to job`)
+      } else {
+        console.error('Failed to link resource:', data.error)
+        showToastMessage('❌ Failed to link resource')
+      }
+    } catch (err) {
+      console.error('Failed to link resource to job:', err)
+      showToastMessage('❌ Network error')
+    }
+  }
+
+  const unlinkResourceFromJob = async (resourceId: string) => {
+    try {
+      const response = await fetch('/api/job-resources/link-to-job', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          resource_id: resourceId
+        })
+      })
+      const data = await response.json()
+      
+      if (data.success) {
+        // Remove from job resources and add back to available resources
+        const unlinkedResource = jobResources.find(r => r.id === resourceId)
+        if (unlinkedResource) {
+          setJobResources(prev => prev.filter(resource => resource.id !== resourceId))
+          setAllJobResources(prev => [...prev, { ...unlinkedResource, job_id: undefined, jobs: undefined }])
+          showToastMessage(`🔗 Resource "${unlinkedResource.title}" unlinked from job`)
+        }
+      } else {
+        console.error('Failed to unlink resource:', data.error)
+        showToastMessage('❌ Failed to unlink resource')
+      }
+    } catch (err) {
+      console.error('Failed to unlink resource from job:', err)
+      showToastMessage('❌ Network error')
+    }
+  }
+
 
   const addPaperToJob = async (paperId: string) => {
     try {
@@ -239,19 +365,19 @@ export default function JobDetail() {
     }
   }
 
-  const addInterviewResource = async () => {
-    if (!jobId || !newResource.title.trim() || !newResource.content.trim()) return
+  const addJobResource = async () => {
+    if (!jobId || !newResource.title.trim()) return
 
     try {
-      const response = await fetch('/api/interview-resources', {
+      const response = await fetch('/api/job-resources', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          job_id: jobId,
+          user_id: 'default',
           title: newResource.title,
           url: newResource.url || null,
           resource_type: newResource.resource_type,
-          content: newResource.content,
+          description: newResource.description || newResource.content,
           tags: newResource.tags
         })
       })
@@ -259,22 +385,23 @@ export default function JobDetail() {
       const data = await response.json()
 
       if (data.success) {
-        setInterviewResources(prev => [...prev, data.data])
-        showToastMessage(`✅ Interview resource "${data.data.title}" added successfully!`)
+        // Link the newly created resource to this job
+        await linkResourceToJob(data.data.id)
         setShowAddResourceModal(false)
         setNewResource({
           title: '',
           url: '',
           resource_type: 'note',
+          description: '',
           content: '',
           tags: []
         })
       } else {
         console.error('Failed to add resource:', data.error)
-        showToastMessage(`❌ Failed to add interview resource`)
+        showToastMessage(`❌ Failed to add resource`)
       }
     } catch (err) {
-      console.error('Failed to add interview resource:', err)
+      console.error('Failed to add job resource:', err)
       showToastMessage(`❌ Network error occurred`)
     }
   }
@@ -337,6 +464,13 @@ export default function JobDetail() {
               >
                 Research
               </button>
+              <button
+                onClick={deleteCurrentJob}
+                className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700"
+                title="Delete this job"
+              >
+                🗑️ Delete
+              </button>
             </div>
           </div>
         </div>
@@ -371,7 +505,7 @@ export default function JobDetail() {
                 : 'text-gray-600 hover:text-gray-800'
             }`}
           >
-            Interview Resources ({interviewResources.length})
+            Job Resources ({jobResources.length})
           </button>
         </div>
 
@@ -470,7 +604,7 @@ export default function JobDetail() {
                         {paper.company} • {paper.publication_date ? new Date(paper.publication_date).getFullYear() : 'N/A'}
                       </p>
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 items-center">
                       <span className={`px-2 py-1 text-xs rounded-full ${
                         paper.company === 'OpenAI' ? 'bg-blue-100 text-blue-700' :
                         paper.company === 'Anthropic' ? 'bg-purple-100 text-purple-700' :
@@ -480,8 +614,15 @@ export default function JobDetail() {
                       </span>
                       <button
                         onClick={() => removePaperFromJob(paper.id)}
-                        className="text-red-600 hover:text-red-800 px-2 py-1 text-xs rounded"
+                        className="text-orange-600 hover:text-orange-800 px-2 py-1 text-xs rounded"
                         title="Remove from job"
+                      >
+                        🔗
+                      </button>
+                      <button
+                        onClick={() => deletePaper(paper.id, paper.title)}
+                        className="text-red-600 hover:text-red-800 px-2 py-1 text-xs rounded"
+                        title="Delete paper permanently"
                       >
                         🗑️
                       </button>
@@ -527,36 +668,57 @@ export default function JobDetail() {
           </div>
         )}
 
-        {/* Interview Resources Tab */}
+        {/* Job Resources Tab */}
         {activeTab === 'resources' && (
           <div className="space-y-4">
             <div className="flex justify-between items-center">
-              <h3 className="text-lg font-medium">Interview Resources ({interviewResources.length})</h3>
-              <button
-                onClick={() => setShowAddResourceModal(true)}
-                className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
-              >
-                + Add Resource
-              </button>
-            </div>
-            {interviewResources.length === 0 ? (
-              <div className="bg-white rounded-lg shadow-sm border p-8 text-center">
-                <p className="text-gray-500 mb-4">No interview resources added yet</p>
+              <h3 className="text-lg font-medium">Job Resources ({jobResources.length})</h3>
+              <div className="flex gap-2">
                 <button
                   onClick={() => setShowAddResourceModal(true)}
                   className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
                 >
-                  Add First Resource
+                  + Create Resource
+                </button>
+                <button
+                  onClick={() => setShowLinkResourceModal(true)}
+                  className="bg-orange-600 text-white px-4 py-2 rounded hover:bg-orange-700"
+                >
+                  + Link Existing
                 </button>
               </div>
+            </div>
+            {jobResources.length === 0 ? (
+              <div className="bg-white rounded-lg shadow-sm border p-8 text-center">
+                <p className="text-gray-500 mb-4">No resources linked to this job yet</p>
+                <div className="flex gap-2 justify-center">
+                  <button
+                    onClick={() => setShowAddResourceModal(true)}
+                    className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
+                  >
+                    Create First Resource
+                  </button>
+                  <button
+                    onClick={() => setShowLinkResourceModal(true)}
+                    className="bg-orange-600 text-white px-4 py-2 rounded hover:bg-orange-700"
+                  >
+                    Link Existing Resource
+                  </button>
+                </div>
+              </div>
             ) : (
-              interviewResources.map(resource => (
+              jobResources.map(resource => (
                 <div key={resource.id} className="bg-white rounded-lg shadow-sm border p-6">
                   <div className="flex justify-between items-start mb-3">
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-2">
                         <h3 className="text-lg font-semibold">{resource.title}</h3>
                         <span className={`px-2 py-1 text-xs rounded-full ${
+                          resource.resource_type === 'course' ? 'bg-blue-100 text-blue-700' :
+                          resource.resource_type === 'book' ? 'bg-purple-100 text-purple-700' :
+                          resource.resource_type === 'video' ? 'bg-red-100 text-red-700' :
+                          resource.resource_type === 'article' ? 'bg-green-100 text-green-700' :
+                          resource.resource_type === 'tool' ? 'bg-yellow-100 text-yellow-700' :
                           resource.resource_type === 'preparation' ? 'bg-blue-100 text-blue-700' :
                           resource.resource_type === 'question' ? 'bg-purple-100 text-purple-700' :
                           resource.resource_type === 'experience' ? 'bg-green-100 text-green-700' :
@@ -573,9 +735,11 @@ export default function JobDetail() {
                           </a>
                         </p>
                       )}
-                      <p className="text-gray-700 mb-3">{resource.content}</p>
+                      {(resource.description || resource.content) && (
+                        <p className="text-gray-700 mb-3">{resource.description || resource.content}</p>
+                      )}
                       {resource.tags && resource.tags.length > 0 && (
-                        <div className="flex flex-wrap gap-1">
+                        <div className="flex flex-wrap gap-1 mb-3">
                           {resource.tags.map((tag, i) => (
                             <span key={i} className="px-2 py-1 bg-gray-100 text-gray-600 rounded text-xs">
                               {tag}
@@ -585,11 +749,11 @@ export default function JobDetail() {
                       )}
                     </div>
                     <button
-                      onClick={() => removeInterviewResource(resource.id)}
-                      className="text-red-600 hover:text-red-800 px-2 py-1 text-xs rounded"
-                      title="Remove resource"
+                      onClick={() => unlinkResourceFromJob(resource.id)}
+                      className="text-orange-600 hover:text-orange-800 px-2 py-1 text-xs rounded"
+                      title="Unlink from job"
                     >
-                      🗑️
+                      🔗
                     </button>
                   </div>
                   <p className="text-xs text-gray-500">
@@ -752,7 +916,7 @@ export default function JobDetail() {
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
             <div className="bg-white rounded-lg max-w-2xl w-full p-6">
               <div className="flex justify-between items-center mb-4">
-                <h3 className="text-lg font-semibold">Add Interview Resource</h3>
+                <h3 className="text-lg font-semibold">Create New Resource</h3>
                 <button
                   onClick={() => {
                     setShowAddResourceModal(false)
@@ -760,6 +924,7 @@ export default function JobDetail() {
                       title: '',
                       url: '',
                       resource_type: 'note',
+                      description: '',
                       content: '',
                       tags: []
                     })
@@ -790,6 +955,11 @@ export default function JobDetail() {
                     className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-blue-500"
                   >
                     <option value="note">Note</option>
+                    <option value="course">Course</option>
+                    <option value="book">Book</option>
+                    <option value="video">Video</option>
+                    <option value="article">Article</option>
+                    <option value="tool">Tool</option>
                     <option value="preparation">Preparation Material</option>
                     <option value="question">Interview Questions</option>
                     <option value="experience">Experience/Tips</option>
@@ -809,11 +979,11 @@ export default function JobDetail() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Content</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
                   <textarea
-                    value={newResource.content}
-                    onChange={(e) => setNewResource({...newResource, content: e.target.value})}
-                    placeholder="Resource content, notes, or description..."
+                    value={newResource.description}
+                    onChange={(e) => setNewResource({...newResource, description: e.target.value, content: e.target.value})}
+                    placeholder="Resource description, notes, or content..."
                     className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-blue-500"
                     rows={4}
                   />
@@ -832,11 +1002,11 @@ export default function JobDetail() {
 
                 <div className="flex gap-3">
                   <button
-                    onClick={addInterviewResource}
+                    onClick={addJobResource}
                     className="flex-1 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700"
-                    disabled={!newResource.title.trim() || !newResource.content.trim()}
+                    disabled={!newResource.title.trim()}
                   >
-                    Add Resource
+                    Create & Link Resource
                   </button>
                   <button
                     onClick={() => {
@@ -845,6 +1015,7 @@ export default function JobDetail() {
                         title: '',
                         url: '',
                         resource_type: 'note',
+                        description: '',
                         content: '',
                         tags: []
                       })
@@ -854,6 +1025,103 @@ export default function JobDetail() {
                     Cancel
                   </button>
                 </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Link Resource Modal */}
+        {showLinkResourceModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <div className="bg-white rounded-lg max-w-4xl w-full max-h-[85vh] overflow-hidden p-6">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-semibold">Link Resource to Job</h3>
+                <button
+                  onClick={() => setShowLinkResourceModal(false)}
+                  className="text-gray-500 hover:text-gray-700"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* Available Resources List */}
+              <div className="overflow-y-auto max-h-[50vh]">
+                <div className="grid gap-3">
+                  {allJobResources.filter(resource => {
+                    // Only show resources that are not already linked to this job
+                    return !resource.job_id || resource.job_id !== jobId
+                  }).map(resource => (
+                    <div
+                      key={resource.id}
+                      className="border rounded-lg p-4 hover:bg-gray-50 transition-colors"
+                    >
+                      <div className="flex justify-between items-start mb-2">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <h4 className="font-medium text-gray-900">{resource.title}</h4>
+                            <span className={`px-2 py-1 text-xs rounded-full ${
+                              resource.resource_type === 'course' ? 'bg-blue-100 text-blue-700' :
+                              resource.resource_type === 'book' ? 'bg-purple-100 text-purple-700' :
+                              resource.resource_type === 'video' ? 'bg-red-100 text-red-700' :
+                              resource.resource_type === 'article' ? 'bg-green-100 text-green-700' :
+                              resource.resource_type === 'tool' ? 'bg-yellow-100 text-yellow-700' :
+                              resource.resource_type === 'preparation' ? 'bg-blue-100 text-blue-700' :
+                              resource.resource_type === 'question' ? 'bg-purple-100 text-purple-700' :
+                              resource.resource_type === 'experience' ? 'bg-green-100 text-green-700' :
+                              resource.resource_type === 'note' ? 'bg-gray-100 text-gray-700' :
+                              'bg-orange-100 text-orange-700'
+                            }`}>
+                              {resource.resource_type}
+                            </span>
+                          </div>
+                          {resource.url && (
+                            <p className="text-sm text-blue-600 mb-1">
+                              <a href={resource.url} target="_blank" rel="noopener noreferrer" className="hover:underline">
+                                {resource.url}
+                              </a>
+                            </p>
+                          )}
+                          {resource.description && (
+                            <p className="text-sm text-gray-700">{resource.description}</p>
+                          )}
+                          {resource.jobs && (
+                            <p className="text-xs text-gray-500 mt-1">
+                              Currently linked to: {resource.jobs.company} - {resource.jobs.title}
+                            </p>
+                          )}
+                        </div>
+                        <div className="flex gap-2 items-center">
+                          <button
+                            onClick={() => linkResourceToJob(resource.id)}
+                            className="text-sm bg-orange-100 hover:bg-orange-200 text-orange-700 px-3 py-1 rounded"
+                            disabled={resource.job_id === jobId}
+                          >
+                            Link to Job
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  {allJobResources.filter(resource => !resource.job_id || resource.job_id !== jobId).length === 0 && (
+                    <div className="text-center py-8 text-gray-500">
+                      <p className="mb-2">No resources available to link.</p>
+                      <p className="text-sm">Create resources in the Jobs page first.</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div className="mt-4 pt-4 border-t flex justify-between items-center">
+                <div className="text-sm text-gray-600">
+                  {allJobResources.filter(resource => !resource.job_id || resource.job_id !== jobId).length} available resources
+                </div>
+                <button
+                  onClick={() => setShowLinkResourceModal(false)}
+                  className="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded"
+                >
+                  Done
+                </button>
               </div>
             </div>
           </div>

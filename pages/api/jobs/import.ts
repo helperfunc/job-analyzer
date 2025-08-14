@@ -30,13 +30,58 @@ export default async function handler(
       })
     }
 
-    // Import jobs to database
+    // Check for existing jobs to avoid duplicates
+    // Use company + title + location as unique identifier
+    const processedJobs = []
+    const batchDuplicates = new Set<string>()
+    
+    for (const job of jobs) {
+      // Create a unique key for this batch
+      const batchKey = `${job.company?.toLowerCase() || ''}_${job.title?.toLowerCase() || ''}_${job.location?.toLowerCase() || ''}`
+      
+      // Skip if already processed in this batch
+      if (batchDuplicates.has(batchKey)) {
+        console.log(`Skipping batch duplicate: ${job.title} at ${job.company}`)
+        continue
+      }
+      
+      // Check if job already exists in database
+      const { data: existingJobs, error: checkError } = await supabase
+        .from('jobs')
+        .select('id')
+        .ilike('company', job.company)
+        .ilike('title', job.title)
+        .ilike('location', job.location || '')
+        .limit(1)
+      
+      if (checkError) {
+        console.error('Error checking for existing job:', checkError)
+        continue
+      }
+      
+      // If no existing job found, add to processed list
+      if (!existingJobs || existingJobs.length === 0) {
+        processedJobs.push(job)
+        batchDuplicates.add(batchKey)
+      } else {
+        console.log(`Skipping database duplicate: ${job.title} at ${job.company}`)
+      }
+    }
+    
+    // Only import new jobs
+    if (processedJobs.length === 0) {
+      return res.status(200).json({
+        success: true,
+        message: 'No new jobs to import - all jobs already exist in database',
+        count: 0,
+        skipped: jobs.length
+      })
+    }
+
+    // Import new jobs to database
     const { data, error } = await supabase
       .from('jobs')
-      .upsert(jobs, { 
-        onConflict: 'id',
-        ignoreDuplicates: true 
-      })
+      .insert(processedJobs)
       .select()
 
     if (error) {
@@ -78,10 +123,17 @@ CREATE TABLE jobs (
       throw error
     }
 
+    const importedCount = data?.length || 0
+    const skippedCount = jobs.length - processedJobs.length
+    
     res.status(200).json({
       success: true,
-      message: 'Jobs imported successfully',
-      count: data?.length || 0
+      message: importedCount > 0 
+        ? `Successfully imported ${importedCount} new jobs${skippedCount > 0 ? `, skipped ${skippedCount} duplicates` : ''}`
+        : 'No new jobs imported',
+      count: importedCount,
+      skipped: skippedCount,
+      total: jobs.length
     })
 
   } catch (error) {

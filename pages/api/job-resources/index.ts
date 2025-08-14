@@ -13,15 +13,26 @@ const supabase = createClient(supabaseUrl, supabaseKey)
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method === 'GET') {
     try {
-      const { user_id } = req.query
+      const { user_id, job_id } = req.query
 
       let query = supabase
         .from('job_resources')
-        .select('*')
+        .select(`
+          *,
+          jobs!job_resources_job_id_fkey (
+            id,
+            title,
+            company
+          )
+        `)
         .order('created_at', { ascending: false })
 
       if (user_id) {
         query = query.eq('user_id', user_id)
+      }
+
+      if (job_id) {
+        query = query.eq('job_id', job_id)
       }
 
       const { data, error } = await query
@@ -48,7 +59,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
   } else if (req.method === 'POST') {
     try {
-      const { user_id, title, url, resource_type, description } = req.body
+      const { user_id, job_id, title, url, resource_type, description } = req.body
 
       if (!user_id || !title || !resource_type) {
         return res.status(400).json({
@@ -61,6 +72,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         .from('job_resources')
         .insert([{
           user_id,
+          job_id: job_id || null,
           title,
           url: url || null,
           resource_type,

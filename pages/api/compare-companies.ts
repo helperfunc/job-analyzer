@@ -229,9 +229,9 @@ export default async function handler(
       const openaiSkills = new Set(openai.top_skills.map(s => s.skill))
       const anthropicSkills = new Set(anthropic.top_skills.map(s => s.skill))
       
-      skillOverlap.common_skills = [...openaiSkills].filter(skill => anthropicSkills.has(skill))
-      skillOverlap.openai_unique = [...openaiSkills].filter(skill => !anthropicSkills.has(skill))
-      skillOverlap.anthropic_unique = [...anthropicSkills].filter(skill => !openaiSkills.has(skill))
+      skillOverlap.common_skills = Array.from(openaiSkills).filter(skill => anthropicSkills.has(skill))
+      skillOverlap.openai_unique = Array.from(openaiSkills).filter(skill => !anthropicSkills.has(skill))
+      skillOverlap.anthropic_unique = Array.from(anthropicSkills).filter(skill => !openaiSkills.has(skill))
 
       // Job title analysis
       const roleGroups: { [key: string]: { openai: Job[], anthropic: Job[] } } = {}
@@ -308,8 +308,7 @@ export default async function handler(
   } catch (error) {
     console.error('Comparison error:', error)
     res.status(500).json({ 
-      error: 'Failed to compare companies',
-      details: error instanceof Error ? error.message : 'Unknown error'
+      error: 'Failed to compare companies'
     })
   }
 }

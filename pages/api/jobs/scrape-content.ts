@@ -51,7 +51,7 @@ export default async function handler(
           timeout: 15000
         })
         // Additional wait for dynamic content
-        await page.waitForTimeout(2000)
+        await new Promise(resolve => setTimeout(resolve, 2000))
       } else {
         await page.waitForSelector('h1, h2, [role="heading"], .job-title, .posting-headline', {
           timeout: 10000
@@ -152,7 +152,8 @@ export default async function handler(
       const getTextFromSelectors = (selectors: string[]): string => {
         for (const selector of selectors) {
           const elements = document.querySelectorAll(selector)
-          for (const element of elements) {
+          for (let i = 0; i < elements.length; i++) {
+            const element = elements[i]
             const text = element.textContent?.trim()
             if (text && text.length > 3 && !text.toLowerCase().includes('job details')) {
               // Clean up the text
@@ -168,7 +169,8 @@ export default async function handler(
         const texts: string[] = []
         for (const selector of selectors) {
           const elements = document.querySelectorAll(selector)
-          for (const element of elements) {
+          for (let i = 0; i < elements.length; i++) {
+            const element = elements[i]
             const text = element.textContent?.trim()
             if (text && text.length > 10) {
               texts.push(text.replace(/\s+/g, ' ').trim())
@@ -239,7 +241,7 @@ export default async function handler(
       const techSkills = searchText.match(/\b(JavaScript|TypeScript|Python|Java|C\+\+|C#|Go|Rust|React|Angular|Vue|Node\.js|Express|Django|Flask|Spring|\.NET|SQL|NoSQL|MongoDB|PostgreSQL|MySQL|Redis|Git|GitHub|GitLab|AWS|Azure|GCP|Docker|Kubernetes|Terraform|CI\/CD|Machine Learning|AI|Data Science|Analytics|GraphQL|REST|API|Microservices|Linux|Unix|Agile|Scrum|HTML|CSS|SASS|Webpack|DevOps|Cloud|TensorFlow|PyTorch|Kafka|RabbitMQ|Elasticsearch|Jenkins|Ansible)\b/gi)
       
       if (techSkills) {
-        skills = [...new Set(techSkills.map(skill => skill.charAt(0).toUpperCase() + skill.slice(1).toLowerCase()))]
+        skills = Array.from(new Set(techSkills.map(skill => skill.charAt(0).toUpperCase() + skill.slice(1).toLowerCase())))
       }
 
       // Debug info
