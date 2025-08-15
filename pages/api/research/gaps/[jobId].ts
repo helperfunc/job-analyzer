@@ -1,6 +1,17 @@
 import { NextApiRequest, NextApiResponse } from 'next'
 import { supabase } from '../../../../lib/supabase'
-import { mockGapAnalysis } from '../../../../data/mock-research-data'
+
+// Empty mock data fallback
+const mockGapAnalysis = {
+  job_id: '',
+  user_id: 'default',
+  gap_analysis: {
+    missing_skills: [],
+    suggestions: [],
+    confidence_score: 0
+  },
+  projects: []
+}
 
 export default async function handler(
   req: NextApiRequest,

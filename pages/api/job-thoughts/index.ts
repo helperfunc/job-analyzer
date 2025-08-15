@@ -12,21 +12,17 @@ export default async function handler(
     })
   }
 
+  const { job_id } = req.query
+
   if (req.method === 'GET') {
     try {
-      const { paper_id, user_id } = req.query
-
       let query = supabase
-        .from('paper_insights')
+        .from('job_thoughts')
         .select('*')
         .order('created_at', { ascending: false })
 
-      if (paper_id) {
-        query = query.eq('paper_id', paper_id)
-      }
-
-      if (user_id) {
-        query = query.eq('user_id', user_id)
+      if (job_id) {
+        query = query.eq('job_id', job_id)
       }
 
       const { data, error } = await query
@@ -38,43 +34,32 @@ export default async function handler(
         data: data || []
       })
     } catch (error) {
-      console.error('Error fetching paper insights:', error)
+      console.error('Error fetching job thoughts:', error)
       res.status(500).json({
         success: false,
-        error: 'Failed to fetch paper insights'
+        error: 'Failed to fetch job thoughts'
       })
     }
   } else if (req.method === 'POST') {
     try {
-      const { 
-        paper_id, 
-        user_id, 
-        insight, 
-        insight_type,
-        thought_type,
-        rating,
-        relevance_to_career,
-        implementation_difficulty
-      } = req.body
+      const { job_id, thought_type, content, rating, is_interested } = req.body
 
-      if (!paper_id || !insight) {
+      if (!job_id || !content) {
         return res.status(400).json({
           success: false,
-          error: 'paper_id and insight are required'
+          error: 'job_id and content are required'
         })
       }
 
       const { data, error } = await supabase
-        .from('paper_insights')
+        .from('job_thoughts')
         .insert([{
-          paper_id,
-          user_id: user_id || 'default',
-          insight,
-          insight_type: insight_type || 'note',
+          job_id,
           thought_type: thought_type || 'general',
+          content,
           rating,
-          relevance_to_career,
-          implementation_difficulty
+          is_interested: is_interested !== undefined ? is_interested : true,
+          user_id: 'default' // In a real app, this would come from auth
         }])
         .select()
         .single()
@@ -86,10 +71,10 @@ export default async function handler(
         data
       })
     } catch (error) {
-      console.error('Error creating paper insight:', error)
+      console.error('Error creating job thought:', error)
       res.status(500).json({
         success: false,
-        error: 'Failed to create paper insight'
+        error: 'Failed to create job thought'
       })
     }
   } else {

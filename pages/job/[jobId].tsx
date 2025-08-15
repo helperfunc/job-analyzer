@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/router'
+import JobThoughts from '../../components/JobThoughts'
 
 interface Job {
   id: string
@@ -507,6 +508,16 @@ export default function JobDetail() {
           >
             Job Resources ({jobResources.length})
           </button>
+          <button
+            onClick={() => setActiveTab('thoughts')}
+            className={`pb-3 px-2 font-medium transition-colors ${
+              activeTab === 'thoughts'
+                ? 'text-blue-600 border-b-2 border-blue-600'
+                : 'text-gray-600 hover:text-gray-800'
+            }`}
+          >
+            My Thoughts
+          </button>
         </div>
 
         {/* Tab Content */}
@@ -762,6 +773,16 @@ export default function JobDetail() {
                 </div>
               ))
             )}
+          </div>
+        )}
+
+        {/* My Thoughts Tab */}
+        {activeTab === 'thoughts' && (
+          <div className="bg-white rounded-lg shadow-sm border p-6">
+            <JobThoughts 
+              jobId={jobId as string}
+              onShowToast={showToastMessage}
+            />
           </div>
         )}
 

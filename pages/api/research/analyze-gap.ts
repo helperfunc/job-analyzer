@@ -1,7 +1,18 @@
 import { NextApiRequest, NextApiResponse } from 'next'
 import { supabase } from '../../../lib/supabase'
 import OpenAI from 'openai'
-import { mockGapAnalysis } from '../../../data/mock-research-data'
+
+// Empty mock data fallback
+const mockGapAnalysis = {
+  job_id: '',
+  user_id: 'default',
+  gap_analysis: {
+    missing_skills: [],
+    suggestions: [],
+    confidence_score: 0
+  },
+  projects: []
+}
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY

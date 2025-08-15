@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import PaperInsights from './PaperInsights'
 
 interface Paper {
   id: string
@@ -66,6 +67,7 @@ export default function PapersTab({
   const [paperUrl, setPaperUrl] = useState('')
   const [extracting, setExtracting] = useState(false)
   const [extractedPaper, setExtractedPaper] = useState<Paper | null>(null)
+  const [expandedPaperId, setExpandedPaperId] = useState<string | null>(null)
 
   // Filter and sort papers
   const filteredPapers = papers.filter(paper => {
@@ -74,7 +76,7 @@ export default function PapersTab({
       paper.authors.some(author => author.toLowerCase().includes(searchTerm.toLowerCase())) ||
       paper.abstract.toLowerCase().includes(searchTerm.toLowerCase())
     
-    const matchesCompany = selectedCompany === '' || paper.company === selectedCompany
+    const matchesCompany = selectedCompany === '' || paper.company.toLowerCase() === selectedCompany
     const matchesYear = selectedYear === '' || paper.publication_date.startsWith(selectedYear)
     
     return matchesSearch && matchesCompany && matchesYear
@@ -272,11 +274,11 @@ export default function PapersTab({
                   </h3>
                   <div className="flex flex-wrap gap-2 mb-2">
                     <span className={`px-2 py-1 rounded text-xs font-medium ${
-                      paper.company === 'openai' 
+                      paper.company.toLowerCase() === 'openai' 
                         ? 'bg-green-100 text-green-800' 
                         : 'bg-blue-100 text-blue-800'
                     }`}>
-                      {paper.company === 'openai' ? 'OpenAI' : 'Anthropic'}
+                      {paper.company.toLowerCase() === 'openai' ? 'OpenAI' : 'Anthropic'}
                     </span>
                     <span className="px-2 py-1 bg-gray-100 text-gray-800 rounded text-xs">
                       {formatDate(paper.publication_date)}
@@ -313,7 +315,7 @@ export default function PapersTab({
                 ))}
               </div>
 
-              <div className="flex flex-wrap gap-3">
+              <div className="flex flex-wrap gap-3 items-center">
                 <a
                   href={paper.url}
                   target="_blank"
@@ -342,7 +344,23 @@ export default function PapersTab({
                     💻 GitHub
                   </a>
                 )}
+                <button
+                  onClick={() => setExpandedPaperId(expandedPaperId === paper.id ? null : paper.id)}
+                  className="text-purple-600 hover:text-purple-800 text-sm font-medium ml-2"
+                >
+                  {expandedPaperId === paper.id ? '🧠 Hide Insights' : '🧠 View Insights'}
+                </button>
               </div>
+
+              {/* Expandable Insights Section */}
+              {expandedPaperId === paper.id && (
+                <div className="mt-4 pt-4 border-t border-gray-200">
+                  <PaperInsights 
+                    paperId={paper.id}
+                    onShowToast={onShowToast}
+                  />
+                </div>
+              )}
             </div>
           ))
         )}

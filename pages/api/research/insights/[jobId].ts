@@ -1,6 +1,8 @@
 import { NextApiRequest, NextApiResponse } from 'next'
 import { supabase } from '../../../../lib/supabase'
-import { mockInsights } from '../../../../data/mock-research-data'
+
+// Empty mock data fallback
+const mockInsights: any[] = []
 
 export default async function handler(
   req: NextApiRequest,
