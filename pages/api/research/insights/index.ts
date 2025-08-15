@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next'
-import { supabase } from '../../../../lib/supabase'
+import { getSupabase } from '../../../../lib/supabase'
 
 export default async function handler(
   req: NextApiRequest,
@@ -23,6 +23,7 @@ export default async function handler(
         })
       }
 
+      const supabase = getSupabase()
       const { data, error } = await supabase
         .from('user_insights')
         .insert([{
@@ -63,6 +64,7 @@ export default async function handler(
       if (content !== undefined) updateData.content = content
       if (resources !== undefined) updateData.resources = resources
 
+      const supabase = getSupabase()
       const { data, error } = await supabase
         .from('user_insights')
         .update(updateData)
@@ -94,6 +96,7 @@ export default async function handler(
         })
       }
 
+      const supabase = getSupabase()
       const { error } = await supabase
         .from('user_insights')
         .delete()

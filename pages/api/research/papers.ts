@@ -28,6 +28,19 @@ export default async function handler(
     try {
       const { company, limit = 100, offset = 0 } = req.query
 
+      // Get total count first
+      let countQuery = supabase
+        .from('research_papers')
+        .select('*', { count: 'exact', head: true })
+
+      if (company) {
+        countQuery = countQuery.eq('company', company)
+      }
+
+      const { count, error: countError } = await countQuery
+      if (countError) throw countError
+
+      // Get the actual data with limit and offset
       let query = supabase
         .from('research_papers')
         .select('*')
@@ -44,7 +57,7 @@ export default async function handler(
       res.status(200).json({
         success: true,
         data: data || [],
-        total: data?.length || 0
+        total: count || 0
       })
     } catch (error) {
       console.error('Error fetching papers:', error)

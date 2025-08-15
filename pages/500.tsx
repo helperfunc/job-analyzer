@@ -5,15 +5,15 @@ export default function Custom500() {
         <div className="bg-white py-8 px-4 shadow sm:rounded-lg sm:px-10">
           <div className="text-center">
             <h1 className="text-6xl font-bold text-red-500 mb-4">500</h1>
-            <h2 className="text-2xl font-bold text-gray-900 mb-4">服务器错误</h2>
+            <h2 className="text-2xl font-bold text-gray-900 mb-4">Server Error</h2>
             <p className="text-gray-600 mb-6">
-              服务器内部发生错误，请稍后再试。
+              An internal server error occurred. Please try again later.
             </p>
             <button
               onClick={() => window.location.reload()}
               className="bg-red-500 hover:bg-red-600 text-white font-medium py-2 px-4 rounded-lg transition-colors"
             >
-              刷新页面
+              Refresh Page
             </button>
           </div>
         </div>

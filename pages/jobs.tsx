@@ -399,7 +399,7 @@ export default function JobsPage() {
   }
 
   const clearAllJobs = async () => {
-    const confirmed = confirm('⚠️ 确定要删除所有工作数据吗？\n\n这将删除数据库中的所有工作记录，此操作不可撤销！')
+    const confirmed = confirm('⚠️ Are you sure you want to delete all job data?\n\nThis will permanently delete all job records from the database. This action cannot be undone!')
     
     if (!confirmed) return
 

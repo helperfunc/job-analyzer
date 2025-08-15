@@ -268,28 +268,28 @@ export default async function handler(
         .reverse()
 
       // Generate insights
-      insights.push(`💰 ${salaryComparison.winner} 平均薪资更高，差距约 $${salaryComparison.difference}k`)
-      insights.push(`📊 OpenAI 有 ${openai.total_jobs} 个职位，Anthropic 有 ${anthropic.total_jobs} 个职位`)
+      insights.push(`💰 ${salaryComparison.winner} has higher average salary, difference of approximately $${salaryComparison.difference}k`)
+      insights.push(`📊 OpenAI has ${openai.total_jobs} positions, Anthropic has ${anthropic.total_jobs} positions`)
       
       if (skillOverlap.common_skills.length > 0) {
-        insights.push(`🔗 共同技能要求：${skillOverlap.common_skills.slice(0, 3).join(', ')}`)
+        insights.push(`🔗 Common skill requirements: ${skillOverlap.common_skills.slice(0, 3).join(', ')}`)
       }
       
       const topRole = jobTitleAnalysis.similar_roles[0]
       if (topRole) {
-        insights.push(`👥 最常见角色是 ${topRole.role_type}，OpenAI ${topRole.openai_count} 个，Anthropic ${topRole.anthropic_count} 个`)
+        insights.push(`👥 Most common role is ${topRole.role_type}, OpenAI ${topRole.openai_count}, Anthropic ${topRole.anthropic_count}`)
       }
 
       if (openai.highest_salary! > anthropic.highest_salary!) {
-        insights.push(`🏆 OpenAI 最高薪资达 $${openai.highest_salary}k，高于 Anthropic 的 $${anthropic.highest_salary}k`)
+        insights.push(`🏆 OpenAI's highest salary reaches $${openai.highest_salary}k, higher than Anthropic's $${anthropic.highest_salary}k`)
       } else if (anthropic.highest_salary! > openai.highest_salary!) {
-        insights.push(`🏆 Anthropic 最高薪资达 $${anthropic.highest_salary}k，高于 OpenAI 的 $${openai.highest_salary}k`)
+        insights.push(`🏆 Anthropic's highest salary reaches $${anthropic.highest_salary}k, higher than OpenAI's $${openai.highest_salary}k`)
       }
     } else if (companies.length === 1) {
-      insights.push(`📊 目前只有 ${companies[0].name} 的数据`)
-      insights.push(`💼 总计 ${companies[0].total_jobs} 个职位，其中 ${companies[0].jobs_with_salary} 个有薪资信息`)
+      insights.push(`📊 Currently only have data for ${companies[0].name}`)
+      insights.push(`💼 Total ${companies[0].total_jobs} positions, of which ${companies[0].jobs_with_salary} have salary information`)
       if (companies[0].avg_salary_max) {
-        insights.push(`💰 平均薪资范围：$${companies[0].avg_salary_min}k - $${companies[0].avg_salary_max}k`)
+        insights.push(`💰 Average salary range: $${companies[0].avg_salary_min}k - $${companies[0].avg_salary_max}k`)
       }
     }
 

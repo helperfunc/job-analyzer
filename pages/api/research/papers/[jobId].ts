@@ -16,7 +16,7 @@ export default async function handler(
 
   if (req.method === 'GET') {
     try {
-      // 获取与职位相关的论文
+      // Get papers related to the position
       const { data, error } = await supabase
         .from('job_paper_relations')
         .select(`

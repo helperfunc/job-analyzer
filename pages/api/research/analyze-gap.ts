@@ -47,7 +47,7 @@ export default async function handler(
       })
     }
 
-    // 获取职位信息
+    // Get job information
     const { data: jobData, error: jobError } = await supabase
       .from('jobs')
       .select('*')
@@ -58,7 +58,7 @@ export default async function handler(
       throw new Error('Job not found')
     }
 
-    // 使用OpenAI分析技能差距
+    // Use OpenAI to analyze skill gaps
     const prompt = `
     Analyze the skill gap between required skills and current skills.
     
@@ -91,7 +91,7 @@ export default async function handler(
 
     const gapAnalysis = JSON.parse(completion.choices[0].message.content || '{}')
 
-    // 保存分析结果
+    // Save analysis results
     const { data, error } = await supabase
       .from('skill_gaps')
       .upsert([{

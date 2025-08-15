@@ -40,7 +40,7 @@ export default async function handler(
         })
       }
 
-      // 获取技能差距分析及相关项目推荐
+      // Get skill gap analysis and related project recommendations
       const { data, error } = await supabase
         .from('skill_gaps')
         .select(`

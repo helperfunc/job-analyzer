@@ -1,5 +1,5 @@
-// 初始化Research模块的示例数据
-// 运行: node scripts/init-research-data.js
+// Initialize sample data for Research module
+// Run: node scripts/init-research-data.js
 
 const samplePapers = [
   {
@@ -62,5 +62,5 @@ samplePapers.forEach(paper => {
   console.log(`- ${paper.title} (${paper.company})`);
 });
 
-// 导出以便其他脚本使用
+// Export for use by other scripts
 module.exports = { samplePapers };

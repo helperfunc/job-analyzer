@@ -1,172 +1,172 @@
-# AI 求职助手 Job Search Assistant
+# AI Job Search Assistant
 <img width="1900" height="3590" alt="localhost" src="https://github.com/user-attachments/assets/f58cf97b-0629-4410-9666-b7a350325382" />
 
-一个功能完整的AI驱动求职助手，帮助你系统性地准备求职，从技能分析到论文研究，成为你找工作路上的智能伙伴。
+A comprehensive AI-powered job search assistant that helps you systematically prepare for job applications, from skill analysis to research paper exploration, serving as your intelligent companion in the job search journey.
 
-## ✨ 核心功能
+## ✨ Core Features
 
-### 📊 职位分析
-- 🔗 自动抓取OpenAI和Anthropic最新职位
-- 💰 薪资范围分析和排序
-- 🛠 技能要求统计和趋势
-- 🏢 公司对比分析
+### 📊 Job Analysis
+- 🔗 Automatically scrape latest positions from OpenAI and Anthropic
+- 💰 Salary range analysis and sorting
+- 🛠 Skill requirement statistics and trends
+- 🏢 Company comparison analysis
 
-### 🎓 Research Center (核心功能)
-- 📚 **论文研究**: 一键抓取OpenAI/Anthropic最新论文，了解技术前沿
-- 🔗 **职位关联**: 将论文与职位建立关联，准备面试谈话要点
-- 💡 **个人见解**: 记录对每个职位的想法、经验和学习心得
-- 🎯 **技能差距分析**: AI分析你的技能与职位要求的差距，提供学习建议
-- 🛠 **求职资源库**: 收集和管理视频、文章、工具等求职相关资源
+### 🎓 Research Center (Core Feature)
+- 📚 **Research Papers**: One-click scraping of latest papers from OpenAI/Anthropic to understand cutting-edge technology
+- 🔗 **Job Linking**: Connect papers with job positions to prepare interview talking points
+- 💡 **Personal Insights**: Record thoughts, experiences, and learning notes for each position
+- 🎯 **Skill Gap Analysis**: AI analyzes the gap between your skills and job requirements, providing learning suggestions
+- 🛠 **Job Resource Library**: Collect and manage videos, articles, tools, and other job-related resources
 
-### 🎯 智能分析
-- 🤖 GPT-4驱动的技能差距分析
-- 📈 个性化学习路径推荐
-- 🎪 技能匹配度评分
+### 🎯 Intelligent Analysis
+- 🤖 GPT-4 powered skill gap analysis
+- 📈 Personalized learning path recommendations
+- 🎪 Skill matching score
 
-## 快速开始
+## Quick Start
 
-### 1. 克隆项目
-wo
+### 1. Clone the Project
+
 ```bash
 git clone https://github.com/yourusername/job-analyzer.git
 cd job-analyzer
 ```
 
-### 2. 安装依赖
+### 2. Install Dependencies
 
 ```bash
 npm install
-# 或
+# or
 yarn install
 ```
 
-### 3. 配置环境变量
+### 3. Configure Environment Variables
 
-复制 `.env.local.example` 到 `.env.local` 并填写你的API密钥：
+Copy `.env.local.example` to `.env.local` and fill in your API keys:
 
 ```bash
 cp .env.local.example .env.local
 ```
 
-编辑 `.env.local`:
+Edit `.env.local`:
 
 ```
-OPENAI_API_KEY=你的OpenAI API密钥
-NEXT_PUBLIC_SUPABASE_URL=你的Supabase URL（可选）
-SUPABASE_ANON_KEY=你的Supabase匿名密钥（可选）
+OPENAI_API_KEY=your_openai_api_key
+NEXT_PUBLIC_SUPABASE_URL=your_supabase_url (optional)
+SUPABASE_ANON_KEY=your_supabase_anon_key (optional)
 ```
 
-### 4. 设置数据库（可选）
+### 4. Setup Database (Optional)
 
-如果你想使用数据库功能：
+If you want to use database functionality:
 
-1. 注册 [Supabase](https://supabase.com) 账号
-2. 创建新项目
-3. 在 `SQL Editor` 中依次运行以下SQL文件：
-   - `database/schema.sql` (基础表结构)
-   - `database/research-schema.sql` (研究功能表)
-   - `database/job-resources-schema.sql` (求职资源表)
-4. 将Supabase的URL和密钥添加到 `.env.local`
+1. Register for a [Supabase](https://supabase.com) account
+2. Create a new project
+3. Run the following SQL files in order in the `SQL Editor`:
+   - `database/schema.sql` (basic table structure)
+   - `database/research-schema.sql` (research feature tables)
+   - `database/job-resources-schema.sql` (job resource tables)
+4. Add your Supabase URL and keys to `.env.local`
 
-### 5. 启动开发服务器
+### 5. Start Development Server
 
 ```bash
 npm run dev
-# 或
+# or
 yarn dev
 ```
 
-访问 [http://localhost:3000](http://localhost:3000) 查看应用。
+Visit [http://localhost:3000](http://localhost:3000) to view the application.
 
-## 部署到 Vercel
+## Deploy to Vercel
 
-1. 将代码推送到 GitHub
-2. 在 [Vercel](https://vercel.com) 导入你的仓库
-3. 配置环境变量
-4. 点击部署
+1. Push code to GitHub
+2. Import your repository on [Vercel](https://vercel.com)
+3. Configure environment variables
+4. Click deploy
 
-## 技术栈
+## Tech Stack
 
-- **前端**: Next.js, React, TypeScript, Tailwind CSS
-- **后端**: Next.js API Routes
+- **Frontend**: Next.js, React, TypeScript, Tailwind CSS
+- **Backend**: Next.js API Routes
 - **AI**: OpenAI GPT-3.5
-- **数据库**: Supabase (PostgreSQL)
-- **部署**: Vercel
+- **Database**: Supabase (PostgreSQL)
+- **Deployment**: Vercel
 
-## 项目结构
+## Project Structure
 
 ```
 job-analyzer/
 ├── pages/
 │   ├── api/
-│   │   └── analyze.ts    # 职位分析API
+│   │   └── analyze.ts    # Job analysis API
 │   ├── _app.tsx
 │   ├── _document.tsx
-│   └── index.tsx         # 主页面
+│   └── index.tsx         # Main page
 ├── lib/
-│   └── supabase.ts       # 数据库连接
+│   └── supabase.ts       # Database connection
 ├── database/
-│   └── schema.sql        # 数据库结构
+│   └── schema.sql        # Database schema
 ├── styles/
-│   └── globals.css       # 全局样式
+│   └── globals.css       # Global styles
 └── package.json
 ```
 
-## 成本估算
+## Cost Estimation
 
-- Vercel: 免费套餐
-- Supabase: 免费套餐
-- OpenAI API: ~$10-50/月（取决于使用量）
-- 域名: $12/年
+- Vercel: Free tier
+- Supabase: Free tier
+- OpenAI API: ~$10-50/month (depending on usage)
+- Domain: $12/year
 
-**总计: < $50/月**
+**Total: < $50/month**
 
-## 🎯 使用场景
+## 🎯 Use Cases
 
-### 准备申请顶级AI公司
-1. **研究公司技术方向**: 抓取最新论文，了解公司研究重点
-2. **分析职位要求**: 使用AI分析技能差距，制定学习计划
-3. **收集学习资源**: 建立个人求职资源库
-4. **记录学习心得**: 系统性记录面试准备过程
+### Preparing for Top AI Companies
+1. **Research Company Direction**: Scrape latest papers to understand company research focus
+2. **Analyze Job Requirements**: Use AI to analyze skill gaps and create learning plans
+3. **Collect Learning Resources**: Build personal job search resource library
+4. **Record Learning Insights**: Systematically document interview preparation process
 
-### 系统性技能提升
-1. **技能盘点**: 全面分析当前能力水平
-2. **对比分析**: 了解不同公司对同一技能的要求差异  
-3. **资源整合**: 收集最优质的学习资源
-4. **进度跟踪**: 记录学习进度和效果
+### Systematic Skill Enhancement
+1. **Skill Inventory**: Comprehensive analysis of current capability level
+2. **Comparative Analysis**: Understand different companies' requirements for the same skills
+3. **Resource Integration**: Collect highest quality learning resources
+4. **Progress Tracking**: Record learning progress and effectiveness
 
-## 🆕 最新功能
+## 🆕 Latest Features
 
 ### Research Center
-- ✅ 论文抓取和管理
-- ✅ 职位-论文关联
-- ✅ 个人见解和笔记
-- ✅ AI技能差距分析
-- ✅ 求职资源收藏
+- ✅ Paper scraping and management
+- ✅ Job-paper linking
+- ✅ Personal insights and notes
+- ✅ AI skill gap analysis
+- ✅ Job resource bookmarks
 
-### 数据管理
-- ✅ Supabase云端存储
-- ✅ 本地数据缓存
-- ✅ 用户数据隔离
+### Data Management
+- ✅ Supabase cloud storage
+- ✅ Local data caching
+- ✅ User data isolation
 
-## 🚀 后续计划
+## 🚀 Future Plans
 
-### 近期功能
-- 面试问题库和答案准备
-- 求职进度跟踪和提醒
-- 简历关键词优化建议
-- LeetCode刷题进度管理
+### Near-term Features
+- Interview question bank and answer preparation
+- Job application progress tracking and reminders
+- Resume keyword optimization suggestions
+- LeetCode practice progress management
 
-### 未来愿景
-- 求职社区和经验分享
-- AI模拟面试和反馈
-- 薪资谈判策略建议
-- 职业发展路径规划
+### Future Vision
+- Job search community and experience sharing
+- AI mock interviews and feedback
+- Salary negotiation strategy advice
+- Career development path planning
 
-## 贡献
+## Contributing
 
-欢迎提交 Pull Request 或创建 Issue！
+Welcome to submit Pull Requests or create Issues!
 
-## 许可证
+## License
 
 MIT

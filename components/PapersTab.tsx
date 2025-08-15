@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 
 interface Paper {
   id: string
@@ -25,6 +25,7 @@ interface PapersTabProps {
   jobId?: string
   onScrapePapers: (company: string) => void
   scraping: boolean
+  hydrated?: boolean
   onRelatePaper: (paperId: string, jobId: string) => void
   onUnrelatePaper: (paperId: string, jobId: string) => void
   jobs: Job[]
@@ -33,6 +34,7 @@ interface PapersTabProps {
   onRefreshPapers: () => void
   onShowToast: (message: string) => void
   onAddPaper: (paper: Paper) => void
+  onClearScrapingState?: () => void
 }
 
 export default function PapersTab({
@@ -40,6 +42,7 @@ export default function PapersTab({
   jobId,
   onScrapePapers,
   scraping,
+  hydrated = true,
   onRelatePaper,
   onUnrelatePaper,
   jobs,
@@ -47,11 +50,17 @@ export default function PapersTab({
   onClearAllPapers,
   onRefreshPapers,
   onShowToast,
-  onAddPaper
+  onAddPaper,
+  onClearScrapingState
 }: PapersTabProps) {
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedCompany, setSelectedCompany] = useState('')
   const [selectedYear, setSelectedYear] = useState('')
+  
+  // Debug effect to monitor props changes
+  useEffect(() => {
+    console.log(`📊 PapersTab received props: hydrated=${hydrated}, scraping=${scraping}`)
+  }, [hydrated, scraping])
   const [sortBy, setSortBy] = useState<'date-desc' | 'date-asc' | 'title-asc' | 'title-desc'>('date-desc')
   const [showAddPaperModal, setShowAddPaperModal] = useState(false)
   const [paperUrl, setPaperUrl] = useState('')
@@ -90,7 +99,7 @@ export default function PapersTab({
 
   const getUniqueYears = () => {
     const years = papers.map(paper => paper.publication_date.substring(0, 4))
-    return [...new Set(years)].sort().reverse()
+    return Array.from(new Set(years)).sort().reverse()
   }
 
   const extractPaperInfo = async () => {
@@ -155,17 +164,17 @@ export default function PapersTab({
         <div className="flex gap-4">
           <button
             onClick={() => onScrapePapers('openai')}
-            disabled={scraping}
+            disabled={!hydrated || scraping}
             className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 disabled:opacity-50"
           >
-            {scraping ? 'Scraping...' : '📥 Scrape OpenAI Papers'}
+            {!hydrated ? 'Loading...' : (scraping ? 'Scraping...' : '📥 Scrape OpenAI Papers')}
           </button>
           <button
             onClick={() => onScrapePapers('anthropic')}
-            disabled={scraping}
+            disabled={!hydrated || scraping}
             className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:opacity-50"
           >
-            {scraping ? 'Scraping...' : '📥 Scrape Anthropic Papers'}
+            {!hydrated ? 'Loading...' : (scraping ? 'Scraping...' : '📥 Scrape Anthropic Papers')}
           </button>
           <button
             onClick={() => setShowAddPaperModal(true)}
@@ -182,6 +191,15 @@ export default function PapersTab({
           >
             🔄 Refresh
           </button>
+          {scraping && onClearScrapingState && (
+            <button
+              onClick={onClearScrapingState}
+              className="bg-yellow-600 text-white px-4 py-2 rounded hover:bg-yellow-700"
+              title="Clear scraping state if buttons are stuck"
+            >
+              🔧 Reset State
+            </button>
+          )}
           <button
             onClick={onClearAllPapers}
             className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700"

@@ -24,18 +24,48 @@ interface JobPaperRelation {
   paper: Paper
 }
 
+// Check for scraping state on initial load (client-side only)
+const getInitialScrapingState = () => {
+  if (typeof window === 'undefined') return false
+  
+  try {
+    const scrapingState = localStorage.getItem('research-scraping-in-progress')
+    if (scrapingState) {
+      const { isActive, timestamp } = JSON.parse(scrapingState)
+      const now = Date.now()
+      const ageSeconds = Math.round((now - timestamp) / 1000)
+      const isStillActive = isActive && (now - timestamp) < 10 * 60 * 1000
+      console.log(`🎯 Initial research scraping state check: active=${isActive}, age=${ageSeconds}s, stillActive=${isStillActive}`)
+      return isStillActive
+    } else {
+      console.log('🎯 No research scraping state found in localStorage')
+    }
+  } catch (error) {
+    console.error('Error checking initial research scraping state:', error)
+  }
+  return false
+}
+
 export default function Research() {
   const router = useRouter()
   const { jobId } = router.query
   const [papers, setPapers] = useState<Paper[]>([])
   const [relatedPapers, setRelatedPapers] = useState<JobPaperRelation[]>([])
   const [loading, setLoading] = useState(false)
-  const [scraping, setScraping] = useState(false)
+  const [scraping, _setScraping] = useState(false) // Start with false to avoid hydration issues
+  const [hydrated, setHydrated] = useState(false) // Track hydration state
+  const [mounted, setMounted] = useState(false) // Track if component is mounted
   const [error, setError] = useState('')
   const [selectedJobId, setSelectedJobId] = useState<string>('')
   const [toastMessage, setToastMessage] = useState('')
   const [showToast, setShowToast] = useState(false)
   const [jobs, setJobs] = useState<any[]>([])
+  
+  // Wrapper to log scraping state changes
+  const setScraping = (newState: boolean) => {
+    console.log(`🔄 setScraping: ${scraping} -> ${newState}`)
+    _setScraping(newState)
+  }
 
   // Show toast notification
   const showToastMessage = (message: string) => {
@@ -46,13 +76,68 @@ export default function Research() {
     }, 3000)
   }
 
+  // Track mounting to avoid SSR issues
   useEffect(() => {
+    setMounted(true)
+    setHydrated(true)
+    
+    // Check for scraping state after hydration is complete
+    let hasChecked = false // Prevent multiple checks
+    
+    const checkScrapingState = () => {
+      if (hasChecked) {
+        console.log('⚠️ Skipping duplicate hydration check')
+        return
+      }
+      hasChecked = true
+      
+      console.log('🔍 Checking research scraping state in hydration...')
+      const scrapingState = localStorage.getItem('research-scraping-in-progress')
+      console.log('🔍 Raw localStorage value:', scrapingState)
+      
+      if (scrapingState) {
+        try {
+          const { isActive, timestamp } = JSON.parse(scrapingState)
+          const now = Date.now()
+          const isStillActive = isActive && (now - timestamp) < 10 * 60 * 1000
+          const ageSeconds = Math.round((now - timestamp) / 1000)
+          console.log(`🔍 Hydration research scraping check: active=${isActive}, age=${ageSeconds}s, stillActive=${isStillActive}`)
+          
+          if (isStillActive) {
+            console.log('🔧 Setting research scraping state after hydration!')
+            setScraping(true)
+            // Start polling for completion since scraping was already in progress
+            setTimeout(() => startPollingForCompletion(), 1000) // Small delay to ensure state is set
+            // Note: Don't set loading=true for scraping state, that's for data loading
+          } else {
+            console.log('🔍 Research scraping state expired or inactive')
+          }
+        } catch (error) {
+          console.error('Error in hydration research scraping check:', error)
+        }
+      } else {
+        console.log('🎯 No research scraping state found after hydration')
+      }
+    }
+    
+    // Run the check after a brief delay to ensure hydration is complete
+    setTimeout(checkScrapingState, 100)
+  }, [])
+
+  // Debug effect to monitor scraping state changes
+  useEffect(() => {
+    console.log(`📊 Research scraping state changed: ${scraping}`)
+  }, [scraping])
+
+  useEffect(() => {
+    if (!mounted) return
+    
     if (jobId) {
       fetchRelatedPapers()
     } else {
       fetchAllPapers()
     }
-  }, [jobId])
+  }, [jobId, mounted])
 
   const fetchAllPapers = async () => {
     setLoading(true)
@@ -96,20 +181,48 @@ export default function Research() {
   }
 
   const scrapePapers = async (company: string) => {
+    console.log(`🚀 Starting paper scraping for ${company}`)
     setScraping(true)
     setError('')
     
+    // Save scraping state to localStorage
+    const scrapingState = {
+      isActive: true,
+      timestamp: Date.now(),
+      company: company
+    }
+    localStorage.setItem('research-scraping-in-progress', JSON.stringify(scrapingState))
+    console.log(`💾 Saved research scraping state:`, scrapingState)
+    
     try {
+      console.log(`📡 Making API call to scrape ${company} papers...`)
       const response = await fetch('/api/research/scrape-papers-puppeteer', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ company })
       })
       
+      console.log(`📡 API response status: ${response.status}`)
       const data = await response.json()
+      console.log(`📡 API response data:`, data)
       
-      if (data.success) {
+      // Check if this is a "started" response (background scraping) or "completed" response
+      if (data.success && data.status === 'started') {
+        console.log('✅ Background paper scraping started')
+        setError('')
+        showToastMessage(`🔄 Started scraping ${company} papers in background...`)
+        
+        // Start polling for completion
+        startPollingForCompletion()
+        
+      } else if (data.success && data.count !== undefined) {
+        // This is a completed response (legacy sync mode)
+        console.log('✅ Paper scraping completed successfully, clearing state')
         showToastMessage(`✅ Successfully scraped ${data.count} papers`)
+        setScraping(false)
+        localStorage.removeItem('research-scraping-in-progress')
+        console.log('🗑️ Removed research scraping state (completed)')
+        
         // Refresh the papers list
         if (jobId) {
           fetchRelatedPapers()
@@ -117,16 +230,96 @@ export default function Research() {
           fetchAllPapers()
         }
       } else {
-        setError(data.error || 'Failed to scrape papers')
-        showToastMessage('❌ Failed to scrape papers')
+        throw new Error(data.error || 'Failed to scrape papers')
       }
     } catch (err) {
-      console.error('Error scraping papers:', err)
+      console.error('❌ Error scraping papers:', err)
       setError('Network error while scraping')
       showToastMessage('❌ Network error while scraping')
-    } finally {
       setScraping(false)
+      localStorage.removeItem('research-scraping-in-progress')
+      console.log('🗑️ Removed research scraping state (error)')
     }
+  }
+
+  const startPollingForCompletion = () => {
+    console.log('🔄 Starting research polling for completion...')
+    let pollCount = 0
+    let initialPaperCount = papers.length
+    let hasDetectedNewData = false
+    
+    const pollInterval = setInterval(async () => {
+      pollCount++
+      console.log(`🔄 Research poll #${pollCount}: Checking for new papers...`)
+      
+      try {
+        // Fetch current papers count
+        const response = await fetch('/api/research/papers?limit=1')
+        const data = await response.json()
+        const currentPaperCount = data.total || data.data?.length || 0
+        
+        console.log(`📊 Research poll #${pollCount}: Paper count ${initialPaperCount} -> ${currentPaperCount}`)
+        
+        if (currentPaperCount > initialPaperCount) {
+          if (!hasDetectedNewData) {
+            hasDetectedNewData = true
+            console.log(`📊 New research data detected! Count changed from ${initialPaperCount} to ${currentPaperCount}`)
+          }
+          
+          // Wait at least 30 seconds after first detecting new data to ensure scraping is complete
+          const waitedEnoughAfterDetection = pollCount >= 3 // 30 seconds minimum wait
+          
+          if (hasDetectedNewData && waitedEnoughAfterDetection) {
+            console.log('✅ Research scraping detected as complete!')
+            clearInterval(pollInterval)
+            
+            // Clear scraping state
+            setScraping(false)
+            localStorage.removeItem('research-scraping-in-progress')
+            console.log('🗑️ Polling cleared research scraping state')
+            
+            // Refresh the papers list
+            if (jobId) {
+              fetchRelatedPapers()
+            } else {
+              fetchAllPapers()
+            }
+            
+            showToastMessage('✅ Research scraping completed!')
+          }
+        } else if (hasDetectedNewData && pollCount >= 12) {
+          // If we previously detected data but count hasn't increased for 2 minutes, assume completion
+          console.log('✅ Research scraping appears complete (no new data for 2+ minutes)')
+          clearInterval(pollInterval)
+          
+          // Clear scraping state
+          setScraping(false)
+          localStorage.removeItem('research-scraping-in-progress')
+          console.log('🗑️ Polling cleared research scraping state (timeout)')
+          
+          // Refresh the papers list
+          if (jobId) {
+            fetchRelatedPapers()
+          } else {
+            fetchAllPapers()
+          }
+          
+          showToastMessage('✅ Research scraping completed!')
+        }
+        
+        // Stop polling after reasonable time (10 minutes)
+        if (pollCount >= 60) {
+          console.log('⏰ Research polling timeout reached, stopping...')
+          clearInterval(pollInterval)
+          setScraping(false)
+          localStorage.removeItem('research-scraping-in-progress')
+          showToastMessage('⏰ Research scraping timeout - check manually')
+        }
+      } catch (pollError) {
+        console.error('❌ Research polling error:', pollError)
+        // Don't stop polling for network errors, continue trying
+      }
+    }, 10000) // Poll every 10 seconds
   }
 
   const deletePaper = async (paperId: string) => {
@@ -176,6 +369,13 @@ export default function Research() {
       console.error('Error clearing papers:', err)
       showToastMessage('❌ Network error while clearing')
     }
+  }
+
+  const clearScrapingState = () => {
+    setScraping(false)
+    localStorage.removeItem('research-scraping-in-progress')
+    console.log('🗑️ Manually cleared research scraping state')
+    showToastMessage('🗑️ Research scraping state cleared')
   }
 
   const relatePaperToJob = async (paperId: string, jobId: string) => {
@@ -288,6 +488,7 @@ export default function Research() {
             jobId={jobId as string}
             onScrapePapers={scrapePapers}
             scraping={scraping}
+            hydrated={hydrated}
             onRelatePaper={relatePaperToJob}
             onUnrelatePaper={unrelatePaperFromJob}
             jobs={jobs}
@@ -296,6 +497,7 @@ export default function Research() {
             onRefreshPapers={fetchAllPapers}
             onShowToast={showToastMessage}
             onAddPaper={(paper) => setPapers(prev => [...prev, paper])}
+            onClearScrapingState={clearScrapingState}
           />
         )}
 

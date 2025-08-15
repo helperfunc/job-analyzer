@@ -27,7 +27,7 @@ export default async function handler(
       })
     }
 
-    // 获取技能差距分析
+    // Get skill gap analysis
     const { data: gapData, error: gapError } = await supabase
       .from('skill_gaps')
       .select('*, job:jobs(*)')
@@ -41,7 +41,7 @@ export default async function handler(
     const missingSkills = gapData.gap_analysis?.missing_skills || []
     const prioritySkills = gapData.gap_analysis?.priority_skills || []
 
-    // 使用OpenAI生成项目推荐
+    // Use OpenAI to generate project recommendations
     const prompt = `
     Based on the following skill gaps, recommend specific projects that can help build these skills.
     
@@ -80,7 +80,7 @@ export default async function handler(
     const recommendations = JSON.parse(completion.choices[0].message.content || '{}')
     const projects = recommendations.projects || []
 
-    // 保存项目推荐
+    // Save project recommendations
     const projectInserts = projects.map((project: any) => ({
       skill_gap_id,
       project_name: project.project_name,

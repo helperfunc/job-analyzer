@@ -87,9 +87,9 @@ function extractPaperInfo(url: string, html: string) {
 
   // Extract title
   const titleMatches = [
-    html.match(/<title[^>]*>(.*?)<\/title>/is),
-    html.match(/<h1[^>]*class="[^"]*title[^"]*"[^>]*>(.*?)<\/h1>/is),
-    html.match(/<h1[^>]*>(.*?)<\/h1>/is),
+    html.match(/<title[^>]*>(.*?)<\/title>/i),
+    html.match(/<h1[^>]*class="[^"]*title[^"]*"[^>]*>(.*?)<\/h1>/i),
+    html.match(/<h1[^>]*>(.*?)<\/h1>/i),
     html.match(/<meta[^>]*property="og:title"[^>]*content="([^"]*)"[^>]*>/i),
     html.match(/<meta[^>]*name="title"[^>]*content="([^"]*)"[^>]*>/i)
   ]
@@ -106,8 +106,8 @@ function extractPaperInfo(url: string, html: string) {
   // Extract authors
   const authorMatches = [
     html.match(/<meta[^>]*name="(?:authors?|citation_author)"[^>]*content="([^"]*)"[^>]*>/gi),
-    html.match(/<span[^>]*class="[^"]*author[^"]*"[^>]*>(.*?)<\/span>/gis),
-    html.match(/<div[^>]*class="[^"]*author[^"]*"[^>]*>(.*?)<\/div>/gis)
+    html.match(/<span[^>]*class="[^"]*author[^"]*"[^>]*>(.*?)<\/span>/gi),
+    html.match(/<div[^>]*class="[^"]*author[^"]*"[^>]*>(.*?)<\/div>/gi)
   ]
 
   if (authorMatches[0]) {
@@ -126,9 +126,9 @@ function extractPaperInfo(url: string, html: string) {
   const abstractMatches = [
     html.match(/<meta[^>]*name="description"[^>]*content="([^"]*)"[^>]*>/i),
     html.match(/<meta[^>]*property="og:description"[^>]*content="([^"]*)"[^>]*>/i),
-    html.match(/<div[^>]*class="[^"]*abstract[^"]*"[^>]*>(.*?)<\/div>/is),
-    html.match(/<p[^>]*class="[^"]*abstract[^"]*"[^>]*>(.*?)<\/p>/is),
-    html.match(/<section[^>]*class="[^"]*abstract[^"]*"[^>]*>(.*?)<\/section>/is)
+    html.match(/<div[^>]*class="[^"]*abstract[^"]*"[^>]*>(.*?)<\/div>/i),
+    html.match(/<p[^>]*class="[^"]*abstract[^"]*"[^>]*>(.*?)<\/p>/i),
+    html.match(/<section[^>]*class="[^"]*abstract[^"]*"[^>]*>(.*?)<\/section>/i)
   ]
 
   for (const match of abstractMatches) {

@@ -188,10 +188,20 @@ export default async function handler(
   })
   
   try {
+    // Start scraping asynchronously and return immediately
     const scrapingLogic = async () => {
       
       const companyName = isAnthropic ? 'Anthropic' : isOpenAI ? 'OpenAI' : 'Unknown'
       console.log(`🔍 Starting ${companyName} careers scraping...`)
+      
+      // Set scraping status to active
+      try {
+        await fetch(`${req.headers.origin || 'http://localhost:3000'}/api/scraping-status?company=${companyName.toLowerCase()}`, {
+          method: 'POST'
+        })
+      } catch (error) {
+        console.log('Failed to set scraping status (non-critical)')
+      }
       
       // Use the provided URL
       const mainUrl = url
@@ -1148,8 +1158,8 @@ export default async function handler(
       })
     }
     
-    // Save jobs directly to database
-    console.log(`💾 Saving ${jobs.length} jobs to database for ${companyName}...`)
+    // Clear existing jobs for this company before adding new ones
+    console.log(`🗑️ Clearing existing ${companyName} jobs from database...`)
     
     if (!supabase) {
       return res.status(503).json({
@@ -1157,6 +1167,22 @@ export default async function handler(
         error: 'Database not configured'
       })
     }
+
+    // Delete existing jobs for this company
+    const { error: deleteError } = await supabase
+      .from('jobs')
+      .delete()
+      .ilike('company', companyName)
+    
+    if (deleteError) {
+      console.error('Error clearing existing jobs:', deleteError)
+      // Continue anyway - it might be first time scraping
+    } else {
+      console.log(`✅ Cleared existing ${companyName} jobs`)
+    }
+
+    // Save jobs directly to database
+    console.log(`💾 Saving ${jobs.length} jobs to database for ${companyName}...`)
 
     // Generate UUIDs for jobs
     const generateUUID = (): string => {
@@ -1183,46 +1209,20 @@ export default async function handler(
       created_at: new Date().toISOString()
     }))
 
-    // Import jobs using duplicate checking logic
+    // Import all jobs directly since we cleared existing ones
     try {
-      const processedJobs = []
-      
-      for (const job of dbJobs) {
-        // Check if job already exists based on company, title, and location
-        const { data: existingJobs, error: checkError } = await supabase
-          .from('jobs')
-          .select('id')
-          .ilike('company', job.company)
-          .ilike('title', job.title)
-          .ilike('location', job.location || '')
-          .limit(1)
-        
-        if (checkError) {
-          console.error('Error checking for existing job:', checkError)
-          continue
-        }
-        
-        // If no existing job found, add to processed list
-        if (!existingJobs || existingJobs.length === 0) {
-          processedJobs.push(job)
-        } else {
-          console.log(`Skipping duplicate job: ${job.title} at ${job.company}`)
-        }
-      }
-      
-      // Import new jobs to database
       let importedCount = 0
-      if (processedJobs.length > 0) {
+      if (dbJobs.length > 0) {
         const { data, error } = await supabase
           .from('jobs')
-          .insert(processedJobs)
+          .insert(dbJobs)
           .select()
 
         if (error) throw error
         importedCount = data?.length || 0
       }
 
-      console.log(`✅ Imported ${importedCount} new jobs, skipped ${jobs.length - processedJobs.length} duplicates`)
+      console.log(`✅ Imported ${importedCount} new jobs for ${companyName}`)
       
       // Get all jobs for this company to create summary
       const { data: actualJobs, error: getAllError } = await supabase
@@ -1260,12 +1260,22 @@ export default async function handler(
       const mlSkill = topSkills.find(s => s.skill === 'Machine Learning')
       console.log(`🔍 Machine Learning count: ${mlSkill?.count || 0}`)
       
+      // Clear scraping status
+      try {
+        await fetch(`${req.headers.origin || 'http://localhost:3000'}/api/scraping-status?company=${companyName.toLowerCase()}`, {
+          method: 'DELETE'
+        })
+        console.log(`✅ Cleared scraping status for ${companyName}`)
+      } catch (error) {
+        console.log('Failed to clear scraping status (non-critical)')
+      }
+      
       // Clear the timeout before returning
       if (timeoutId) clearTimeout(timeoutId);
       
       return {
         success: true,
-        message: `Successfully scraped and imported ${importedCount} new jobs from ${companyName} (${jobs.length - processedJobs.length} duplicates skipped)`,
+        message: `Successfully scraped and imported ${importedCount} new jobs from ${companyName}`,
         company: companyName,
         filepath: 'Database records',
         dataSource: 'database',
@@ -1290,9 +1300,32 @@ export default async function handler(
     
     } // End of scrapingLogic function
 
-    // Execute scraping logic with timeout handling
-    const result = await Promise.race([scrapingLogic(), timeoutPromise]);
-    res.status(200).json(result);
+    // Start scraping in background and return immediately
+    const companyName = isAnthropic ? 'Anthropic' : isOpenAI ? 'OpenAI' : 'Unknown'
+    
+    // Execute scraping logic in background (no await)
+    Promise.race([scrapingLogic(), timeoutPromise])
+      .then((result) => {
+        console.log(`✅ Background scraping completed for ${companyName}`)
+      })
+      .catch((error) => {
+        console.error(`❌ Background scraping failed for ${companyName}:`, error)
+        // Clear scraping status on error
+        fetch(`${req.headers.origin || 'http://localhost:3000'}/api/scraping-status?company=${companyName.toLowerCase()}`, {
+          method: 'DELETE'
+        }).catch(() => {})
+      })
+      .finally(() => {
+        if (timeoutId) clearTimeout(timeoutId)
+      })
+    
+    // Return immediately to avoid browser timeout
+    res.status(200).json({
+      success: true,
+      message: `Started background scraping for ${companyName}. Use polling to check completion.`,
+      company: companyName,
+      status: 'started'
+    });
 
   } catch (error) {
     console.error('Scraping error:', error)

@@ -1,4 +1,4 @@
-// 初始化数据库示例数据
+// Initialize database with sample data
 const { createClient } = require('@supabase/supabase-js')
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://iszbbsnhqakhjrfkzspv.supabase.co'

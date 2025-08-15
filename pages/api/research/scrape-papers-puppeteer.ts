@@ -40,116 +40,150 @@ export default async function handler(
   try {
     console.log(`🚀 Starting Puppeteer to scrape ${company} research papers...`)
     
-    // Launch Puppeteer with settings to bypass Cloudflare
-    browser = await puppeteer.launch({
-      headless: true, // Set to false for debugging
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-accelerated-2d-canvas',
-        '--disable-gpu',
-        '--window-size=1920x1080',
-        '--disable-blink-features=AutomationControlled',
-        '--disable-features=VizDisplayCompositor'
-      ]
-    })
-    
-    const page = await browser.newPage()
-    
-    // Set a realistic user agent with English language preference
-    await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
-    
-    // Set viewport
-    await page.setViewport({ width: 1920, height: 1080 })
-    
-    // Set extra headers to request English content
-    await page.setExtraHTTPHeaders({
-      'Accept-Language': 'en-US,en;q=0.9',
-      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8'
-    })
-    
-    // Hide webdriver presence
-    await page.evaluateOnNewDocument(() => {
-      Object.defineProperty(navigator, 'webdriver', {
-        get: () => undefined,
-      })
-      Object.defineProperty(navigator, 'languages', {
-        get: () => ['en-US', 'en'],
-      })
-      Object.defineProperty(navigator, 'language', {
-        get: () => 'en-US',
-      })
-    })
+    // Start scraping asynchronously and return immediately
+    const scrapingLogic = async () => {
+      try {
+        // Launch Puppeteer with settings to bypass Cloudflare
+        browser = await puppeteer.launch({
+          headless: true, // Set to false for debugging
+          args: [
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage',
+            '--disable-accelerated-2d-canvas',
+            '--disable-gpu',
+            '--window-size=1920x1080',
+            '--disable-blink-features=AutomationControlled',
+            '--disable-features=VizDisplayCompositor'
+          ]
+        })
+        
+        const page = await browser.newPage()
+        
+        // Set a realistic user agent with English language preference
+        await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
+        
+        // Set viewport
+        await page.setViewport({ width: 1920, height: 1080 })
+        
+        // Set extra headers to request English content
+        await page.setExtraHTTPHeaders({
+          'Accept-Language': 'en-US,en;q=0.9',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8'
+        })
+        
+        // Hide webdriver presence
+        await page.evaluateOnNewDocument(() => {
+          Object.defineProperty(navigator, 'webdriver', {
+            get: () => undefined,
+          })
+          Object.defineProperty(navigator, 'languages', {
+            get: () => ['en-US', 'en'],
+          })
+          Object.defineProperty(navigator, 'language', {
+            get: () => 'en-US',
+          })
+        })
 
-    const papers: Paper[] = []
+        const papers: Paper[] = []
 
-    if (company.toLowerCase() === 'openai') {
-      await scrapeOpenAIWithPuppeteer(page, papers)
-    } else {
-      await scrapeAnthropicWithPuppeteer(page, papers)
-    }
+        if (company.toLowerCase() === 'openai') {
+          await scrapeOpenAIWithPuppeteer(page, papers)
+        } else {
+          await scrapeAnthropicWithPuppeteer(page, papers)
+        }
 
-    // Save papers to database if Supabase is configured
-    if (supabase && papers.length > 0) {
-      console.log(`💾 Attempting to save ${papers.length} papers to database...`)
-      let savedCount = 0
-      
-      for (let i = 0; i < papers.length; i++) {
-        const paper = papers[i]
-        try {
-          // Generate unique URL by appending index if multiple papers have same URL
-          const uniqueUrl = paper.url === 'https://openai.com/research' ? 
-            `https://openai.com/research/${encodeURIComponent(paper.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 50))}` :
-            paper.url
+        // Save papers to database if Supabase is configured
+        if (supabase && papers.length > 0) {
+          console.log(`💾 Attempting to save ${papers.length} papers to database...`)
+          let savedCount = 0
           
-          const paperToSave = {
-            ...paper,
-            url: uniqueUrl
+          for (let i = 0; i < papers.length; i++) {
+            const paper = papers[i]
+            try {
+              // Generate unique URL by appending index if multiple papers have same URL
+              const uniqueUrl = paper.url === 'https://openai.com/research' ? 
+                `https://openai.com/research/${encodeURIComponent(paper.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 50))}` :
+                paper.url
+              
+              const paperToSave = {
+                ...paper,
+                url: uniqueUrl
+              }
+              
+              console.log(`💾 Saving paper ${i + 1}/${papers.length}: ${paper.title.substring(0, 50)}...`)
+              
+              const { data, error } = await supabase
+                .from('research_papers')
+                .upsert([paperToSave], { 
+                  onConflict: 'url'
+                })
+                .select()
+
+              if (error) {
+                console.error(`❌ Error saving paper "${paper.title}":`, error)
+              } else if (data) {
+                savedCount += data.length
+                console.log(`✅ Successfully saved: ${paper.title.substring(0, 50)}...`)
+              }
+            } catch (err) {
+              console.error(`❌ Exception saving paper "${paper.title}":`, err)
+            }
           }
-          
-          console.log(`💾 Saving paper ${i + 1}/${papers.length}: ${paper.title.substring(0, 50)}...`)
-          
-          const { data, error } = await supabase
-            .from('research_papers')
-            .upsert([paperToSave], { 
-              onConflict: 'url'
-            })
-            .select()
+          console.log(`✅ Total saved ${savedCount} out of ${papers.length} papers to database`)
+        }
 
-          if (error) {
-            console.error(`❌ Error saving paper "${paper.title}":`, error)
-          } else if (data) {
-            savedCount += data.length
-            console.log(`✅ Successfully saved: ${paper.title.substring(0, 50)}...`)
-          }
-        } catch (err) {
-          console.error(`❌ Exception saving paper "${paper.title}":`, err)
+        return {
+          success: true,
+          company,
+          count: papers.length,
+          papers: papers.slice(0, 10), // Return first 10 papers as preview
+          message: `Successfully scraped ${papers.length} papers from ${company} using Puppeteer`
+        }
+      } catch (scrapingError) {
+        console.error(`❌ Background research scraping failed for ${company}:`, scrapingError)
+        return {
+          success: false,
+          company,
+          error: scrapingError instanceof Error ? scrapingError.message : 'Unknown scraping error'
+        }
+      } finally {
+        if (browser) {
+          console.log('🔒 Closing browser...')
+          await browser.close()
         }
       }
-      console.log(`✅ Total saved ${savedCount} out of ${papers.length} papers to database`)
     }
 
+    // Create a timeout promise
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error('Scraping timeout')), 10 * 60 * 1000) // 10 minute timeout
+    })
+
+    // Start scraping in background and return immediately
+    Promise.race([scrapingLogic(), timeoutPromise])
+      .then((result) => {
+        console.log(`✅ Background research scraping completed for ${company}`)
+      })
+      .catch((error) => {
+        console.error(`❌ Background research scraping failed for ${company}:`, error)
+      })
+
+    // Return immediately to avoid browser timeout
     res.status(200).json({
       success: true,
-      company,
-      count: papers.length,
-      papers: papers.slice(0, 10), // Return first 10 papers as preview
-      message: `Successfully scraped ${papers.length} papers from ${company} using Puppeteer`
+      message: `Started background scraping for ${company} papers. Use polling to check completion.`,
+      company: company,
+      status: 'started'
     })
 
   } catch (error) {
-    console.error('Error scraping papers with Puppeteer:', error)
+    console.error('Error starting background research scraping:', error)
     res.status(500).json({
       success: false,
-      error: 'Failed to scrape papers with Puppeteer',
+      error: 'Failed to start background scraping',
       details: error instanceof Error ? error.message : 'Unknown error'
     })
-  } finally {
-    if (browser) {
-      console.log('🔒 Closing browser...')
-      await browser.close()
-    }
   }
 }
 
