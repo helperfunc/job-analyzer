@@ -56,7 +56,7 @@ NEXT_PUBLIC_SUPABASE_URL=your_supabase_url (optional)
 SUPABASE_ANON_KEY=your_supabase_anon_key (optional)
 ```
 
-### 4. Setup Database (Optional)
+### 4. Setup Database
 
 If you want to use database functionality:
 
