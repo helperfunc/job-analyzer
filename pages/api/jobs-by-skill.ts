@@ -1,16 +1,18 @@
 import { NextApiRequest, NextApiResponse } from 'next'
-import fs from 'fs'
-import path from 'path'
+import { supabase } from '../../lib/supabase'
 
 interface Job {
+  id: string
   title: string
-  url: string
+  company: string
   location: string
-  department: string
+  department?: string
   salary?: string
   salary_min?: number
   salary_max?: number
   skills?: string[]
+  description?: string
+  url?: string
 }
 
 export default async function handler(
@@ -32,41 +34,44 @@ export default async function handler(
   console.log(`🔍 Filtering jobs by skill '${skill}' for company: ${companyFilter}`)
 
   try {
-    // Read the latest job data for the specified company
-    const dataDir = path.join(process.cwd(), 'data')
+    // Query jobs from Supabase that have the specified skill
+    console.log(`🔍 Querying Supabase for jobs with skill: ${skill}`)
     
-    if (!fs.existsSync(dataDir)) {
-      return res.status(404).json({ error: 'No job data found' })
+    let query = supabase
+      .from('jobs')
+      .select('*')
+    
+    // Apply company filter if specified
+    if (companyFilter !== 'all') {
+      query = query.ilike('company', companyFilter)
     }
-
-    const files = fs.readdirSync(dataDir).filter(f => f.startsWith(`${companyFilter}-jobs-`) && f.endsWith('.json'))
     
-    if (files.length === 0) {
-      return res.status(404).json({ error: 'No job data files found' })
+    const { data: allJobs, error: dbError } = await query
+    
+    if (dbError) {
+      console.error('Database error:', dbError)
+      return res.status(500).json({ 
+        error: 'Failed to fetch jobs from database',
+        details: dbError.message
+      })
     }
     
-    // Prioritize REFINED files first, then FIXED files, then latest by time
-    let latestFile
-    const refinedFiles = files.filter(f => f.includes('REFINED')).sort()
-    const fixedFiles = files.filter(f => f.includes('FIXED')).sort()
-    
-    if (refinedFiles.length > 0) {
-      latestFile = refinedFiles[refinedFiles.length - 1] // Latest REFINED file
-      console.log(`📊 Using REFINED data file: ${latestFile}`)
-    } else if (fixedFiles.length > 0) {
-      latestFile = fixedFiles[fixedFiles.length - 1] // Latest FIXED file
-      console.log(`📊 Using FIXED data file: ${latestFile}`)
-    } else {
-      latestFile = files.sort().pop()! // Fallback to latest regular file  
-      console.log(`📊 Using latest data file: ${latestFile}`)
+    if (!allJobs || allJobs.length === 0) {
+      return res.status(404).json({ 
+        error: 'No jobs found',
+        skill,
+        company: companyFilter
+      })
     }
-    const filepath = path.join(dataDir, latestFile)
-    const data = JSON.parse(fs.readFileSync(filepath, 'utf8'))
     
-    // Filter jobs that have this skill
-    const jobsWithSkill = data.jobs.filter((job: Job) => 
-      job.skills && job.skills.includes(skill)
+    // Filter jobs that have this skill (case-insensitive)
+    const jobsWithSkill = allJobs.filter((job: Job) => 
+      job.skills && job.skills.some(s => 
+        s.toLowerCase() === skill.toLowerCase()
+      )
     )
+    
+    console.log(`📊 Found ${jobsWithSkill.length} jobs with ${skill} skill out of ${allJobs.length} total jobs`)
 
     // Sort by salary (highest first)
     const sortedJobs = jobsWithSkill.sort((a: Job, b: Job) => 
@@ -76,14 +81,15 @@ export default async function handler(
     res.status(200).json({
       success: true,
       skill,
+      company: companyFilter,
       total: sortedJobs.length,
       jobs: sortedJobs
     })
 
   } catch (error) {
-    console.error('Error reading job data:', error)
+    console.error('Error fetching job data:', error)
     res.status(500).json({ 
-      error: 'Failed to read job data',
+      error: 'Failed to fetch job data',
       details: error instanceof Error ? error.message : 'Unknown error'
     })
   }
