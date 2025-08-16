@@ -1,4 +1,5 @@
 # AI Job Search Assistant
+https://www.youtube.com/watch?v=IPR4eQ1Fzfs
 <img width="1900" height="3590" alt="localhost" src="https://github.com/user-attachments/assets/f58cf97b-0629-4410-9666-b7a350325382" />
 
 A comprehensive AI-powered job search assistant that helps you systematically prepare for job applications, from skill analysis to research paper exploration, serving as your intelligent companion in the job search journey.
