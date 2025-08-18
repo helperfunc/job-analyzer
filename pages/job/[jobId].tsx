@@ -176,7 +176,7 @@ export default function JobDetail() {
   const fetchJobResources = async () => {
     if (!jobId) return
     try {
-      const response = await fetch(`/api/job-resources?job_id=${jobId}`)
+      const response = await fetch(`/api/resource-job-relations?job_id=${jobId}`)
       const data = await response.json()
       if (data.success) {
         setJobResources(data.data)
@@ -281,21 +281,24 @@ export default function JobDetail() {
 
   const linkResourceToJob = async (resourceId: string) => {
     try {
-      const response = await fetch('/api/job-resources/link-to-job', {
+      const response = await fetch('/api/resource-job-relations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          job_id: jobId,
           resource_id: resourceId,
-          job_id: jobId
+          resource_type: 'job_resources'
         })
       })
       const data = await response.json()
       
       if (data.success) {
-        // Add to job resources and remove from available resources
-        setJobResources(prev => [...prev, data.data])
-        setAllJobResources(prev => prev.filter(resource => resource.id !== resourceId))
-        showToastMessage(`✅ Resource "${data.data.title}" linked to job`)
+        // Refresh both job resources and available resources
+        fetchJobResources()
+        fetchAllJobResources()
+        showToastMessage(`✅ Resource linked to job successfully`)
+      } else if (response.status === 409) {
+        showToastMessage('⚠️ Resource is already linked to this job')
       } else {
         console.error('Failed to link resource:', data.error)
         showToastMessage('❌ Failed to link resource')
@@ -308,23 +311,16 @@ export default function JobDetail() {
 
   const unlinkResourceFromJob = async (resourceId: string) => {
     try {
-      const response = await fetch('/api/job-resources/link-to-job', {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          resource_id: resourceId
-        })
+      const response = await fetch(`/api/resource-job-relations?job_id=${jobId}&resource_id=${resourceId}&resource_type=job_resources`, {
+        method: 'DELETE'
       })
       const data = await response.json()
       
       if (data.success) {
-        // Remove from job resources and add back to available resources
-        const unlinkedResource = jobResources.find(r => r.id === resourceId)
-        if (unlinkedResource) {
-          setJobResources(prev => prev.filter(resource => resource.id !== resourceId))
-          setAllJobResources(prev => [...prev, { ...unlinkedResource, job_id: undefined, jobs: undefined }])
-          showToastMessage(`🔗 Resource "${unlinkedResource.title}" unlinked from job`)
-        }
+        // Refresh both job resources and available resources
+        fetchJobResources()
+        fetchAllJobResources()
+        showToastMessage(`✅ Resource unlinked from job successfully`)
       } else {
         console.error('Failed to unlink resource:', data.error)
         showToastMessage('❌ Failed to unlink resource')

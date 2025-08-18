@@ -101,21 +101,11 @@ export default async function handler(
           for (let i = 0; i < papers.length; i++) {
             const paper = papers[i]
             try {
-              // Generate unique URL by appending index if multiple papers have same URL
-              const uniqueUrl = paper.url === 'https://openai.com/research' ? 
-                `https://openai.com/research/${encodeURIComponent(paper.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 50))}` :
-                paper.url
-              
-              const paperToSave = {
-                ...paper,
-                url: uniqueUrl
-              }
-              
               console.log(`💾 Saving paper ${i + 1}/${papers.length}: ${paper.title.substring(0, 50)}...`)
               
               const { data, error } = await supabase
                 .from('research_papers')
-                .upsert([paperToSave], { 
+                .upsert([paper], { 
                   onConflict: 'url'
                 })
                 .select()
@@ -537,12 +527,48 @@ async function scrapeOpenAIWithPuppeteer(page: any, papers: Paper[]): Promise<vo
           abstract = `${paperType} from OpenAI focusing on ${title.toLowerCase()}.`
         }
         
+        // Generate proper URL for this paper based on title
+        // Use known URL mappings for accuracy, fall back to generated URLs
+        const knownUrlMappings: Record<string, string> = {
+          'gpt-oss-120b & gpt-oss-20b Model Card': 'https://openai.com/index/gpt-oss-model-card/',
+          'Introducing gpt-oss': 'https://openai.com/index/introducing-gpt-oss/',
+          'Introducing GPT-4.1 in the API': 'https://openai.com/index/introducing-gpt-4-1-in-the-api/',
+          'Introducing GPT-5': 'https://openai.com/index/introducing-gpt-5/',
+          'Introducing ChatGPT agent': 'https://openai.com/index/introducing-chatgpt-agent/',
+          'Introducing OpenAI o3 and o4-mini': 'https://openai.com/index/introducing-openai-o3-and-o4-mini/',
+          'Introducing GPT-4.5': 'https://openai.com/index/introducing-gpt-4-5/',
+          'Introducing deep research': 'https://openai.com/index/introducing-deep-research/',
+          'Computer-Using Agent': 'https://openai.com/index/computer-using-agent/',
+          'Hello GPT-4o': 'https://openai.com/index/hello-gpt-4o/',
+          'GPT-4o mini: advancing cost-efficient intelligence': 'https://openai.com/index/gpt-4o-mini-advancing-cost-efficient-intelligence/',
+          'Video generation models as world simulators': 'https://openai.com/index/video-generation-models-as-world-simulators/',
+          'Introducing Whisper': 'https://openai.com/index/introducing-whisper/',
+          'Learning to reason with LLMs': 'https://openai.com/index/learning-to-reason-with-llms/',
+          'GPT-4': 'https://openai.com/index/gpt-4-research/',
+          'Language models are few-shot learners': 'https://openai.com/index/language-models-are-few-shot-learners/'
+        }
+        
+        let paperUrl = knownUrlMappings[title]
+        
+        if (!paperUrl) {
+          // Generate URL from title as fallback
+          let urlSlug = title.toLowerCase()
+            .replace(/\s*&\s*/g, '-and-') // Convert & to -and-
+            .replace(/[^\w\s-]/g, '') // Remove special chars except spaces and hyphens
+            .replace(/\s+/g, '-') // Convert spaces to hyphens
+            .replace(/-+/g, '-') // Collapse multiple hyphens
+            .replace(/^-|-$/g, '') // Remove leading/trailing hyphens
+            .slice(0, 60) // Slightly longer limit for better accuracy
+          
+          paperUrl = `https://openai.com/index/${urlSlug}/`
+        }
+        
         papers.push({
           title, // Use the exact, clean title
           authors: ['OpenAI'],
           publication_date: publicationDate,
           abstract,
-          url: 'https://openai.com/research',
+          url: paperUrl,
           company: 'OpenAI',
           tags: generateTags(title + ' ' + abstract + ' ' + paperType)
         })
@@ -651,6 +677,16 @@ async function scrapeAnthropicWithPuppeteer(page: any, papers: Paper[]): Promise
               // Normalize URL
               if (paperUrl && !paperUrl.startsWith('http')) {
                 paperUrl = `https://www.anthropic.com${paperUrl.startsWith('/') ? '' : '/'}${paperUrl}`
+              } else if (!paperUrl) {
+                // Generate URL from title as fallback (better than generic /research)
+                const urlSlug = title.toLowerCase()
+                  .replace(/[^\w\s-]/g, '') // Remove special chars except spaces and hyphens
+                  .replace(/\s+/g, '-') // Convert spaces to hyphens
+                  .replace(/-+/g, '-') // Collapse multiple hyphens
+                  .replace(/^-|-$/g, '') // Remove leading/trailing hyphens
+                  .slice(0, 60) // Limit length
+                
+                paperUrl = `https://www.anthropic.com/research/${urlSlug}`
               }
               
               // Extract additional info
@@ -674,7 +710,7 @@ async function scrapeAnthropicWithPuppeteer(page: any, papers: Paper[]): Promise
                 authors: ['Anthropic'],
                 publication_date,
                 abstract,
-                url: paperUrl || 'https://www.anthropic.com/research',
+                url: paperUrl,
                 company: 'Anthropic',
                 tags: generateTags(title + ' ' + abstract)
               })

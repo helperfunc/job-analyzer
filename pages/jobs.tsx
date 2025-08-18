@@ -59,13 +59,11 @@ export default function JobsPage() {
   const [selectedJob, setSelectedJob] = useState<Job | null>(null)
   const [showPaperModal, setShowPaperModal] = useState(false)
   const [showResourceModal, setShowResourceModal] = useState(false)
-  const [newResource, setNewResource] = useState({
-    title: '',
-    url: '',
-    resource_type: 'note' as 'preparation' | 'question' | 'experience' | 'note' | 'other',
-    content: '',
-    tags: [] as string[]
-  })
+  const [availableResources, setAvailableResources] = useState<any[]>([])
+  const [selectedResourceId, setSelectedResourceId] = useState<string>('')
+  const [resourceSearchTerm, setResourceSearchTerm] = useState('')
+  const [resourceTypeFilter, setResourceTypeFilter] = useState('')
+  const [jobResources, setJobResources] = useState<Record<string, any[]>>({})
   const [currentPage, setCurrentPage] = useState(1)
   const [jobsPerPage] = useState(12)
   const [toastMessage, setToastMessage] = useState('')
@@ -121,6 +119,18 @@ export default function JobsPage() {
     fetchJobs()
     fetchPapers()
   }, [])
+
+  useEffect(() => {
+    if (jobs.length > 0) {
+      fetchJobResources()
+    }
+  }, [jobs.length])
+
+  useEffect(() => {
+    if (showResourceModal && selectedJob) {
+      fetchAvailableResources()
+    }
+  }, [showResourceModal, selectedJob?.id])
 
   const fetchJobs = async () => {
     setLoading(true)
@@ -502,42 +512,153 @@ export default function JobsPage() {
     }
   }
 
-  const addInterviewResource = async () => {
-    if (!selectedJob || !newResource.title.trim()) return
+  const fetchJobResources = async () => {
+    try {
+      // Fetch all job-resource relations at once instead of per job
+      const [jobRelationsRes, interviewRelationsRes] = await Promise.all([
+        fetch('/api/job-resource-relations'),
+        fetch('/api/interview-resource-relations')  
+      ])
+
+      const [jobRelationsData, interviewRelationsData] = await Promise.all([
+        jobRelationsRes.json(),
+        interviewRelationsRes.json()
+      ])
+
+      // Group resources by job_id
+      const resourcesByJob: Record<string, any[]> = {}
+      
+      // Process job resource relations
+      if (jobRelationsData.success && jobRelationsData.data) {
+        jobRelationsData.data.forEach((relation: any) => {
+          if (!resourcesByJob[relation.job_id]) {
+            resourcesByJob[relation.job_id] = []
+          }
+          resourcesByJob[relation.job_id].push({
+            ...relation.job_resources,
+            source: 'job_resources',
+            relation_id: relation.id
+          })
+        })
+      }
+
+      // Process interview resource relations  
+      if (interviewRelationsData.success && interviewRelationsData.data) {
+        interviewRelationsData.data.forEach((relation: any) => {
+          if (!resourcesByJob[relation.job_id]) {
+            resourcesByJob[relation.job_id] = []
+          }
+          resourcesByJob[relation.job_id].push({
+            ...relation.interview_resources,
+            source: 'interview_resources', 
+            relation_id: relation.id
+          })
+        })
+      }
+
+      setJobResources(resourcesByJob)
+    } catch (error) {
+      console.error('Error fetching job resources:', error)
+    }
+  }
+
+  const fetchAvailableResources = async () => {
+    try {
+      const [jobResourcesRes, interviewResourcesRes] = await Promise.all([
+        fetch('/api/job-resources'),
+        fetch('/api/interview-resources')
+      ])
+
+      const [jobResourcesData, interviewResourcesData] = await Promise.all([
+        jobResourcesRes.json(),
+        interviewResourcesRes.json()
+      ])
+
+      // Get all resources without job_id filtering (since we now use relations)
+      const allResources = [
+        ...(jobResourcesData.success && jobResourcesData.data ? jobResourcesData.data.map((r: any) => ({ ...r, source: 'job_resources' })) : []),
+        ...(interviewResourcesData.success && interviewResourcesData.data ? interviewResourcesData.data.map((r: any) => ({ ...r, source: 'interview_resources' })) : [])
+      ]
+
+      // Get already linked resources for this job
+      let linkedResourceIds: string[] = []
+      if (selectedJob) {
+        try {
+          const linkedResponse = await fetch(`/api/resource-job-relations?job_id=${selectedJob.id}`)
+          const linkedData = await linkedResponse.json()
+          if (linkedData.success && linkedData.data) {
+            linkedResourceIds = linkedData.data.map((r: any) => r.id)
+          }
+        } catch (error) {
+          console.error('Error fetching linked resources:', error)
+        }
+      }
+
+      // Filter out resources that are already linked to this job
+      const unlinkedResources = allResources.filter(r => !linkedResourceIds.includes(r.id))
+      
+      console.log('All resources:', allResources.length, 'Already linked:', linkedResourceIds.length, 'Available:', unlinkedResources.length)
+      setAvailableResources(unlinkedResources)
+    } catch (error) {
+      console.error('Error fetching resources:', error)
+      setAvailableResources([])
+    }
+  }
+
+  const linkResourceToJob = async () => {
+    if (!selectedJob || !selectedResourceId) return
+    
+    const selectedResource = availableResources.find(r => r.id === selectedResourceId)
+    if (!selectedResource) return
 
     try {
-      const response = await fetch('/api/interview-resources', {
+      // Create a relation using the new API
+      const response = await fetch('/api/resource-job-relations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           job_id: selectedJob.id,
-          title: newResource.title,
-          url: newResource.url || null,
-          resource_type: newResource.resource_type,
-          content: newResource.content,
-          tags: newResource.tags
+          resource_id: selectedResourceId,
+          resource_type: selectedResource.source
         })
       })
 
       const data = await response.json()
 
-      if (data.success) {
-        showToastMessage(`✅ Interview resource "${data.data.title}" added successfully!`)
-        setShowResourceModal(false)
-        setNewResource({
-          title: '',
-          url: '',
-          resource_type: 'note',
-          content: '',
-          tags: []
+      if (response.ok && data.success) {
+        console.log('✅ Resource linked successfully:', data)
+        
+        // Update local state immediately
+        const resourceWithSource = { ...selectedResource, source: selectedResource.source }
+        setJobResources(prev => {
+          const newState = {
+            ...prev,
+            [selectedJob.id]: [...(prev[selectedJob.id] || []), resourceWithSource]
+          }
+          console.log('Updated jobResources state:', newState)
+          return newState
         })
+        
+        showToastMessage(`✅ Resource "${selectedResource.title}" linked to job successfully`)
+        setShowResourceModal(false)
+        setSelectedResourceId('')
+        setResourceSearchTerm('')
+        setResourceTypeFilter('')
+        
+        // Refresh data immediately without delay
+        fetchJobResources()
+      } else if (response.status === 409) {
+        showToastMessage('⚠️ Resource is already linked to this job')
+        setShowResourceModal(false)
+        setSelectedResourceId('')
+        setResourceSearchTerm('')
+        setResourceTypeFilter('')
       } else {
-        console.error('Failed to add resource:', data.error)
-        showToastMessage(`❌ Failed to add interview resource`)
+        throw new Error(data.error || 'Failed to create resource relation')
       }
     } catch (err) {
-      console.error('Failed to add interview resource:', err)
-      showToastMessage(`❌ Network error occurred`)
+      console.error('Failed to link resource:', err)
+      showToastMessage(`❌ Failed to link resource: ${err instanceof Error ? err.message : 'Unknown error'}`)
     }
   }
 
@@ -1019,6 +1140,49 @@ export default function JobsPage() {
                   Add Resource
                 </button>
               </div>
+
+              {/* Linked Resources Display */}
+              {jobResources[job.id] && jobResources[job.id].length > 0 && (
+                <div className="mt-3 pt-3 border-t border-gray-100">
+                  <h4 className="text-xs font-medium text-gray-700 mb-2">Linked Resources:</h4>
+                  <div className="space-y-1">
+                    {jobResources[job.id].slice(0, 2).map((resource, i) => (
+                      <div key={resource.id} className="flex items-center gap-2 p-2 bg-gray-50 rounded text-xs">
+                        <span>
+                          {resource.resource_type === 'course' ? '🎓' :
+                           resource.resource_type === 'book' ? '📚' :
+                           resource.resource_type === 'video' ? '🎥' :
+                           resource.resource_type === 'article' ? '📄' :
+                           resource.resource_type === 'tool' ? '🛠️' :
+                           resource.resource_type === 'preparation' ? '📝' :
+                           resource.resource_type === 'question' ? '❓' :
+                           resource.resource_type === 'experience' ? '💡' :
+                           resource.resource_type === 'note' ? '📋' : '🔖'}
+                        </span>
+                        <span className="flex-1 truncate text-gray-700">
+                          {resource.title}
+                        </span>
+                        {resource.url && (
+                          <a
+                            href={resource.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-blue-600 hover:text-blue-800"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            🔗
+                          </a>
+                        )}
+                      </div>
+                    ))}
+                    {jobResources[job.id].length > 2 && (
+                      <div className="text-xs text-gray-500 text-center py-1">
+                        +{jobResources[job.id].length - 2} more resources
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
               
               <button
                 onClick={() => router.push(`/job/${job.id}?company=${job.company.toLowerCase()}&index=0`)}
@@ -1375,18 +1539,14 @@ export default function JobsPage() {
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
             <div className="bg-white rounded-lg max-w-2xl w-full p-6">
               <div className="flex justify-between items-center mb-4">
-                <h3 className="text-lg font-semibold">Add Interview Resource for "{selectedJob.title}"</h3>
+                <h3 className="text-lg font-semibold">Link Resource to "{selectedJob.title}"</h3>
                 <button
                   onClick={() => {
                     setShowResourceModal(false)
                     setSelectedJob(null)
-                    setNewResource({
-                      title: '',
-                      url: '',
-                      resource_type: 'note',
-                      content: '',
-                      tags: []
-                    })
+                    setSelectedResourceId('')
+                    setResourceSearchTerm('')
+                    setResourceTypeFilter('')
                   }}
                   className="text-gray-500 hover:text-gray-700"
                 >
@@ -1395,83 +1555,122 @@ export default function JobsPage() {
               </div>
 
               <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Title</label>
+                {/* Search and Filter */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <input
                     type="text"
-                    value={newResource.title}
-                    onChange={(e) => setNewResource({...newResource, title: e.target.value})}
-                    placeholder="Resource title..."
+                    placeholder="Search resources..."
+                    value={resourceSearchTerm}
+                    onChange={(e) => setResourceSearchTerm(e.target.value)}
                     className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-blue-500"
                   />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Resource Type</label>
                   <select
-                    value={newResource.resource_type}
-                    onChange={(e) => setNewResource({...newResource, resource_type: e.target.value as any})}
+                    value={resourceTypeFilter}
+                    onChange={(e) => setResourceTypeFilter(e.target.value)}
                     className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-blue-500"
                   >
+                    <option value="">All Types</option>
+                    <option value="course">Course</option>
+                    <option value="book">Book</option>
+                    <option value="video">Video</option>
+                    <option value="article">Article</option>
+                    <option value="tool">Tool</option>
+                    <option value="preparation">Preparation</option>
+                    <option value="question">Question</option>
+                    <option value="experience">Experience</option>
                     <option value="note">Note</option>
-                    <option value="preparation">Preparation Material</option>
-                    <option value="question">Interview Questions</option>
-                    <option value="experience">Experience/Tips</option>
                     <option value="other">Other</option>
                   </select>
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">URL (optional)</label>
-                  <input
-                    type="url"
-                    value={newResource.url}
-                    onChange={(e) => setNewResource({...newResource, url: e.target.value})}
-                    placeholder="https://..."
-                    className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Content</label>
-                  <textarea
-                    value={newResource.content}
-                    onChange={(e) => setNewResource({...newResource, content: e.target.value})}
-                    placeholder="Resource content, notes, or description..."
-                    className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-blue-500"
-                    rows={4}
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Tags (comma-separated)</label>
-                  <input
-                    type="text"
-                    value={newResource.tags.join(', ')}
-                    onChange={(e) => setNewResource({...newResource, tags: e.target.value.split(',').map(t => t.trim()).filter(Boolean)})}
-                    placeholder="interview, preparation, technical..."
-                    className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-blue-500"
-                  />
+                {/* Resources List */}
+                <div className="max-h-96 overflow-y-auto border rounded-lg p-2">
+                  {availableResources.length === 0 ? (
+                    <div className="text-center py-8 text-gray-500">
+                      <p className="mb-2">No resources available to link</p>
+                      <button
+                        onClick={() => window.open('/resources', '_blank')}
+                        className="text-blue-600 hover:underline text-sm"
+                      >
+                        Create resources in Resource Center →
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {availableResources
+                        .filter(resource => {
+                          const matchesSearch = !resourceSearchTerm || 
+                            resource.title.toLowerCase().includes(resourceSearchTerm.toLowerCase()) ||
+                            (resource.content || resource.description || '').toLowerCase().includes(resourceSearchTerm.toLowerCase())
+                          const matchesType = !resourceTypeFilter || resource.resource_type === resourceTypeFilter
+                          return matchesSearch && matchesType
+                        })
+                        .map((resource) => (
+                          <label
+                            key={resource.id}
+                            className={`block p-3 border rounded-lg cursor-pointer hover:bg-gray-50 ${
+                              selectedResourceId === resource.id ? 'border-blue-500 bg-blue-50' : 'border-gray-200'
+                            }`}
+                          >
+                            <input
+                              type="radio"
+                              name="resource"
+                              value={resource.id}
+                              checked={selectedResourceId === resource.id}
+                              onChange={(e) => setSelectedResourceId(e.target.value)}
+                              className="sr-only"
+                            />
+                            <div className="flex items-start gap-2">
+                              <span className="text-lg mt-0.5">
+                                {resource.resource_type === 'course' ? '🎓' :
+                                 resource.resource_type === 'book' ? '📚' :
+                                 resource.resource_type === 'video' ? '🎥' :
+                                 resource.resource_type === 'article' ? '📄' :
+                                 resource.resource_type === 'tool' ? '🛠️' :
+                                 resource.resource_type === 'preparation' ? '📝' :
+                                 resource.resource_type === 'question' ? '❓' :
+                                 resource.resource_type === 'experience' ? '💡' :
+                                 resource.resource_type === 'note' ? '📋' : '🔖'}
+                              </span>
+                              <div className="flex-1">
+                                <h4 className="font-medium text-gray-900">{resource.title}</h4>
+                                <p className="text-sm text-gray-600 line-clamp-2">
+                                  {resource.content || resource.description || 'No description available'}
+                                </p>
+                                {resource.url && (
+                                  <a
+                                    href={resource.url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-xs text-blue-600 hover:underline"
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    🔗 View resource
+                                  </a>
+                                )}
+                              </div>
+                            </div>
+                          </label>
+                        ))}
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex gap-3">
                   <button
-                    onClick={addInterviewResource}
-                    className="flex-1 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700"
+                    onClick={linkResourceToJob}
+                    disabled={!selectedResourceId}
+                    className="flex-1 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 disabled:opacity-50"
                   >
-                    Add Resource
+                    Link Selected Resource
                   </button>
                   <button
                     onClick={() => {
                       setShowResourceModal(false)
                       setSelectedJob(null)
-                      setNewResource({
-                        title: '',
-                        url: '',
-                        resource_type: 'note',
-                        content: '',
-                        tags: []
-                      })
+                      setSelectedResourceId('')
+                      setResourceSearchTerm('')
+                      setResourceTypeFilter('')
                     }}
                     className="flex-1 bg-gray-200 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-300"
                   >
