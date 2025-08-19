@@ -58,13 +58,14 @@ export default function JobDetail() {
   const [relatedPapers, setRelatedPapers] = useState<Paper[]>([])
   const [jobResources, setJobResources] = useState<JobResource[]>([])
   const [allJobResources, setAllJobResources] = useState<JobResource[]>([])
-  const [activeTab, setActiveTab] = useState<'info' | 'papers' | 'resources'>('info')
+  const [activeTab, setActiveTab] = useState<'info' | 'papers' | 'resources' | 'thoughts'>('info')
   const [toastMessage, setToastMessage] = useState('')
   const [showToast, setShowToast] = useState(false)
   const [allPapers, setAllPapers] = useState<Paper[]>([])
   const [showAddPaperModal, setShowAddPaperModal] = useState(false)
   const [showAddResourceModal, setShowAddResourceModal] = useState(false)
   const [showLinkResourceModal, setShowLinkResourceModal] = useState(false)
+  const [isJobSaved, setIsJobSaved] = useState(false)
   const [newResource, setNewResource] = useState({
     title: '',
     url: '',
@@ -98,16 +99,58 @@ export default function JobDetail() {
     
     console.log('Loading job details for:', jobId)
     fetchJobDetails()
-    fetchRelatedPapers()
-    fetchJobResources()
     fetchAllPapers()
     fetchAllJobResources()
   }, [router.isReady, jobId])
 
+  // Fetch job-specific data after job is loaded
+  useEffect(() => {
+    if (job?.id) {
+      fetchRelatedPapers()
+      fetchJobResources()
+    }
+  }, [job?.id])
+
   const fetchJobDetails = async () => {
     setLoading(true)
     try {
-      // Try to fetch from database first
+      // First try to find the job by company and index details
+      if (company && index !== undefined) {
+        // Get the title from summary data to help with matching
+        let titleFromSummary = null
+        try {
+          const summaryResponse = await fetch(`/api/get-summary?company=${company}`)
+          const summaryData = await summaryResponse.json()
+          if (summaryData.summary?.highest_paying_jobs) {
+            const jobIndex = parseInt(index as string)
+            const jobData = summaryData.summary.highest_paying_jobs[jobIndex]
+            titleFromSummary = jobData?.title
+          }
+        } catch (err) {
+          console.log('Could not get title from summary:', err)
+        }
+
+        const detailsResponse = await fetch('/api/jobs/find-by-details', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            company: company as string,
+            index: parseInt(index as string),
+            title: titleFromSummary
+          })
+        })
+        
+        const detailsData = await detailsResponse.json()
+        if (detailsData.success && detailsData.job) {
+          // Found job in database by company/index
+          setJob(detailsData.job)
+          setIsJobSaved(true)
+          setLoading(false)
+          return
+        }
+      }
+      
+      // Try to fetch from database by ID
       const dbResponse = await fetch('/api/jobs')
       const dbData = await dbResponse.json()
       
@@ -115,6 +158,7 @@ export default function JobDetail() {
         const foundJob = dbData.jobs.find((j: Job) => j.id === jobId)
         if (foundJob) {
           setJob(foundJob)
+          setIsJobSaved(true)
           setLoading(false)
           return
         }
@@ -130,12 +174,20 @@ export default function JobDetail() {
           const jobData = data.summary.highest_paying_jobs[jobIndex]
           
           if (jobData) {
-            setJob({
+            const tempJob = {
               id: jobId as string,
               ...jobData,
               company: (company as string).charAt(0).toUpperCase() + (company as string).slice(1),
-              description_url: jobData.url || `https://${company}.com/careers`
-            })
+              url: jobData.url || `https://${company}.com/careers`,
+              description_url: jobData.url || `https://${company}.com/careers`,
+              location: jobData.location || '',
+              department: jobData.department || '',
+              skills: jobData.skills || []
+            }
+            setJob(tempJob)
+            setIsJobSaved(false)
+            // Auto-save the job to database
+            setTimeout(() => saveJobToDatabase(tempJob), 500)
           }
         }
       }
@@ -148,9 +200,9 @@ export default function JobDetail() {
   }
 
   const fetchRelatedPapers = async () => {
-    if (!jobId) return
+    if (!job?.id) return
     try {
-      const response = await fetch(`/api/research/papers/${jobId}`)
+      const response = await fetch(`/api/research/papers/${job.id}`)
       const data = await response.json()
       if (data.success) {
         setRelatedPapers(data.data.map((relation: any) => relation.paper))
@@ -174,9 +226,9 @@ export default function JobDetail() {
   }
 
   const fetchJobResources = async () => {
-    if (!jobId) return
+    if (!job?.id) return
     try {
-      const response = await fetch(`/api/resource-job-relations?job_id=${jobId}`)
+      const response = await fetch(`/api/resource-job-relations?job_id=${job.id}`)
       const data = await response.json()
       if (data.success) {
         setJobResources(data.data)
@@ -205,7 +257,7 @@ export default function JobDetail() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           paper_id: paperId,
-          job_id: jobId
+          job_id: job.id
         })
       })
       const data = await response.json()
@@ -251,6 +303,30 @@ export default function JobDetail() {
     }
   }
 
+  const saveJobToDatabase = async (jobToSave: Job) => {
+    try {
+      const response = await fetch('/api/jobs/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(jobToSave)
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        setIsJobSaved(true)
+        console.log('Job saved to database successfully')
+        showToastMessage('✅ Job saved to database')
+      } else {
+        console.error('Failed to save job:', data.error)
+        showToastMessage('❌ Failed to save job to database')
+      }
+    } catch (err) {
+      console.error('Failed to save job to database:', err)
+      showToastMessage('❌ Error saving job to database')
+    }
+  }
+
   const deleteCurrentJob = async () => {
     if (!job) return
 
@@ -259,7 +335,7 @@ export default function JobDetail() {
     }
 
     try {
-      const response = await fetch(`/api/jobs/${jobId}`, {
+      const response = await fetch(`/api/jobs/${job.id}`, {
         method: 'DELETE'
       })
 
@@ -280,12 +356,20 @@ export default function JobDetail() {
   }
 
   const linkResourceToJob = async (resourceId: string) => {
+    // Ensure job is saved before linking resources
+    if (!isJobSaved && job) {
+      showToastMessage('⏳ Saving job first...')
+      await saveJobToDatabase(job)
+      // Wait a bit for database to process
+      await new Promise(resolve => setTimeout(resolve, 1000))
+    }
+
     try {
       const response = await fetch('/api/resource-job-relations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          job_id: jobId,
+          job_id: job.id,
           resource_id: resourceId,
           resource_type: 'job_resources'
         })
@@ -301,7 +385,11 @@ export default function JobDetail() {
         showToastMessage('⚠️ Resource is already linked to this job')
       } else {
         console.error('Failed to link resource:', data.error)
-        showToastMessage('❌ Failed to link resource')
+        if (data.error && data.error.includes('Key is not present')) {
+          showToastMessage('❌ Job not found in database. Please refresh the page.')
+        } else {
+          showToastMessage('❌ Failed to link resource')
+        }
       }
     } catch (err) {
       console.error('Failed to link resource to job:', err)
@@ -311,7 +399,7 @@ export default function JobDetail() {
 
   const unlinkResourceFromJob = async (resourceId: string) => {
     try {
-      const response = await fetch(`/api/resource-job-relations?job_id=${jobId}&resource_id=${resourceId}&resource_type=job_resources`, {
+      const response = await fetch(`/api/resource-job-relations?job_id=${job.id}&resource_id=${resourceId}&resource_type=job_resources`, {
         method: 'DELETE'
       })
       const data = await response.json()
@@ -339,7 +427,7 @@ export default function JobDetail() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           paper_id: paperId,
-          job_id: jobId,
+          job_id: job.id,
           relevance_score: 0.8,
           relevance_reason: 'Manually linked from job detail page'
         })
@@ -363,7 +451,15 @@ export default function JobDetail() {
   }
 
   const addJobResource = async () => {
-    if (!jobId || !newResource.title.trim()) return
+    if (!job?.id || !newResource.title.trim()) return
+
+    // Ensure job is saved before adding resources
+    if (!isJobSaved && job) {
+      showToastMessage('⏳ Saving job first...')
+      await saveJobToDatabase(job)
+      // Wait a bit for database to process
+      await new Promise(resolve => setTimeout(resolve, 1000))
+    }
 
     try {
       const response = await fetch('/api/job-resources', {
@@ -444,11 +540,26 @@ export default function JobDetail() {
           </button>
           
           <div className="flex justify-between items-start">
-            <div>
+            <div className="flex-1">
               <h1 className="text-3xl font-bold mb-2">{job.title}</h1>
-              <p className="text-xl text-gray-600">{job.company}</p>
+              <div className="flex items-center gap-4">
+                <p className="text-xl text-gray-600">{job.company}</p>
+                {!isJobSaved && (
+                  <span className="text-sm bg-yellow-100 text-yellow-700 px-2 py-1 rounded">
+                    Not saved
+                  </span>
+                )}
+              </div>
             </div>
             <div className="flex gap-2">
+              {!isJobSaved && (
+                <button
+                  onClick={() => job && saveJobToDatabase(job)}
+                  className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+                >
+                  Save Job
+                </button>
+              )}
               <button
                 onClick={() => router.push('/jobs')}
                 className="bg-gray-600 text-white px-4 py-2 rounded hover:bg-gray-700"
@@ -456,7 +567,7 @@ export default function JobDetail() {
                 All Jobs
               </button>
               <button
-                onClick={() => router.push(`/research#jobId=${jobId}`)}
+                onClick={() => router.push(`/research#jobId=${job?.id || jobId}`)}
                 className="bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700"
               >
                 Research
@@ -775,8 +886,15 @@ export default function JobDetail() {
         {/* My Thoughts Tab */}
         {activeTab === 'thoughts' && (
           <div className="bg-white rounded-lg shadow-sm border p-6">
+            {!isJobSaved && (
+              <div className="mb-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                <p className="text-yellow-700 text-sm">
+                  ⚠️ This job is being saved to the database. Thoughts will be available once the save is complete.
+                </p>
+              </div>
+            )}
             <JobThoughts 
-              jobId={jobId as string}
+              jobId={job?.id || jobId as string}
               onShowToast={showToastMessage}
             />
           </div>
@@ -1066,7 +1184,7 @@ export default function JobDetail() {
                 <div className="grid gap-3">
                   {allJobResources.filter(resource => {
                     // Only show resources that are not already linked to this job
-                    return !resource.job_id || resource.job_id !== jobId
+                    return !resource.job_id || resource.job_id !== (job?.id || jobId)
                   }).map(resource => (
                     <div
                       key={resource.id}
@@ -1111,7 +1229,7 @@ export default function JobDetail() {
                           <button
                             onClick={() => linkResourceToJob(resource.id)}
                             className="text-sm bg-orange-100 hover:bg-orange-200 text-orange-700 px-3 py-1 rounded"
-                            disabled={resource.job_id === jobId}
+                            disabled={resource.job_id === (job?.id || jobId)}
                           >
                             Link to Job
                           </button>
@@ -1119,7 +1237,7 @@ export default function JobDetail() {
                       </div>
                     </div>
                   ))}
-                  {allJobResources.filter(resource => !resource.job_id || resource.job_id !== jobId).length === 0 && (
+                  {allJobResources.filter(resource => !resource.job_id || resource.job_id !== (job?.id || jobId)).length === 0 && (
                     <div className="text-center py-8 text-gray-500">
                       <p className="mb-2">No resources available to link.</p>
                       <p className="text-sm">Create resources in the Jobs page first.</p>
@@ -1131,7 +1249,7 @@ export default function JobDetail() {
               {/* Footer */}
               <div className="mt-4 pt-4 border-t flex justify-between items-center">
                 <div className="text-sm text-gray-600">
-                  {allJobResources.filter(resource => !resource.job_id || resource.job_id !== jobId).length} available resources
+                  {allJobResources.filter(resource => !resource.job_id || resource.job_id !== (job?.id || jobId)).length} available resources
                 </div>
                 <button
                   onClick={() => setShowLinkResourceModal(false)}

@@ -1,5 +1,6 @@
 import { NextApiRequest, NextApiResponse } from 'next'
 import { supabase } from '../../../lib/supabase'
+import { getCurrentUser } from '../../../lib/auth'
 
 export default async function handler(
   req: NextApiRequest,
@@ -51,6 +52,24 @@ export default async function handler(
         })
       }
 
+      // Get current user - if not logged in, use 'default'
+      const user = await getCurrentUser(req)
+      const userId = user ? user.userId : 'default'
+
+      // First check if the job exists
+      const { data: job } = await supabase
+        .from('jobs')
+        .select('id')
+        .eq('id', job_id)
+        .single()
+
+      if (!job) {
+        return res.status(400).json({
+          success: false,
+          error: 'Job not found in database. Please save the job first.'
+        })
+      }
+
       const { data, error } = await supabase
         .from('job_thoughts')
         .insert([{
@@ -59,7 +78,7 @@ export default async function handler(
           content,
           rating,
           is_interested: is_interested !== undefined ? is_interested : true,
-          user_id: 'default' // In a real app, this would come from auth
+          user_id: userId
         }])
         .select()
         .single()

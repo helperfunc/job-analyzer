@@ -1,8 +1,10 @@
 import Link from 'next/link'
 import { useRouter } from 'next/router'
+import { useAuth } from '../contexts/AuthContext'
 
 export default function Navigation() {
   const router = useRouter()
+  const { user, loading, logout } = useAuth()
   
   const isActive = (path: string) => {
     return router.pathname === path
@@ -80,6 +82,43 @@ export default function Navigation() {
                 Guide
               </Link>
             </div>
+          </div>
+          
+          {/* User menu */}
+          <div className="flex items-center">
+            {loading ? (
+              <div className="text-gray-500">Loading...</div>
+            ) : user ? (
+              <div className="flex items-center space-x-4">
+                <Link
+                  href="/dashboard"
+                  className="text-gray-700 hover:text-gray-900"
+                >
+                  {user.displayName || user.username}
+                </Link>
+                <button
+                  onClick={logout}
+                  className="bg-gray-200 text-gray-700 px-3 py-1 rounded hover:bg-gray-300"
+                >
+                  Logout
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center space-x-4">
+                <Link
+                  href="/auth"
+                  className="text-gray-700 hover:text-gray-900"
+                >
+                  Login
+                </Link>
+                <Link
+                  href="/auth"
+                  className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+                >
+                  Sign Up
+                </Link>
+              </div>
+            )}
           </div>
         </div>
       </div>

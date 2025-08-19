@@ -73,6 +73,21 @@ export default function JobThoughts({ jobId, onShowToast }: JobThoughtsProps) {
       })
 
       const data = await response.json()
+      
+      if (!response.ok) {
+        // Handle specific error messages
+        if (response.status === 400 && data.error) {
+          onShowToast?.(`⚠️ ${data.error}`)
+          // If job not found, notify parent component
+          if (data.error.includes('Job not found')) {
+            console.error('Job not found in database:', jobId)
+          }
+        } else {
+          onShowToast?.('❌ Failed to save thought')
+        }
+        return
+      }
+      
       if (data.success) {
         onShowToast?.(`✅ Thought ${editingThought ? 'updated' : 'added'} successfully`)
         fetchThoughts()
