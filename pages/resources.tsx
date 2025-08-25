@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/router'
+import UserInteractionButtons from '../components/UserInteractionButtons'
+import ResourceThoughts from '../components/ResourceThoughts'
 
 interface Resource {
   id: string
@@ -336,6 +338,24 @@ export default function ResourcesPage() {
                   
                   <div className="text-xs text-gray-500">
                     Created: {new Date(resource.created_at).toLocaleDateString()}
+                  </div>
+                  
+                  {/* Vote and Bookmark buttons */}
+                  <div className="mt-4 pt-4 border-t border-gray-100">
+                    <UserInteractionButtons
+                      targetType="resource"
+                      targetId={resource.id}
+                      itemTitle={resource.title}
+                    />
+                  </div>
+
+                  {/* Resource Thoughts Section */}
+                  <div className="mt-6 pt-4 border-t border-gray-200">
+                    <ResourceThoughts 
+                      resourceId={resource.id}
+                      isPublic={true}
+                      onShowToast={(message) => alert(message)}
+                    />
                   </div>
                 </div>
               ))

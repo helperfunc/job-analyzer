@@ -8,6 +8,7 @@ interface Job {
   url: string
   location: string
   department: string
+  company?: string
   salary?: string
   salary_min?: number
   salary_max?: number
@@ -179,6 +180,7 @@ export default async function handler(
   // Detect which company we're scraping
   const isAnthropic = url.includes('anthropic.com') || url.includes('greenhouse.io/anthropic')
   const isOpenAI = url.includes('openai.com')
+  const isDeepMind = url.includes('greenhouse.io/deepmind')
   
   // Set timeout based on company - longer for Anthropic due to many pages
   const timeout = isAnthropic ? 300000 : 120000 // 5 minutes for Anthropic, 2 minutes for others
@@ -191,7 +193,7 @@ export default async function handler(
     // Start scraping asynchronously and return immediately
     const scrapingLogic = async () => {
       
-      const companyName = isAnthropic ? 'Anthropic' : isOpenAI ? 'OpenAI' : 'Unknown'
+      const companyName = isAnthropic ? 'Anthropic' : isOpenAI ? 'OpenAI' : isDeepMind ? 'DeepMind' : 'Unknown'
       console.log(`🔍 Starting ${companyName} careers scraping...`)
       
       // Set scraping status to active
@@ -247,9 +249,9 @@ export default async function handler(
         console.log(`📄 Received HTML (${html.length} bytes)`)
       }
     
-    // For Anthropic, wait 5 seconds and try to fetch the page again to allow dynamic content to load
-    if (isAnthropic) {
-      console.log('⏳ Anthropic page detected - waiting 5 seconds for dynamic content to load...')
+    // For Anthropic/DeepMind, wait 5 seconds and try to fetch the page again to allow dynamic content to load
+    if (isAnthropic || isDeepMind) {
+      console.log(`⏳ ${companyName} page detected - waiting 5 seconds for dynamic content to load...`)
       console.log('💡 This delay allows JavaScript to render job listings that might be loaded dynamically')
       
       // Wait 5 seconds
@@ -294,9 +296,9 @@ export default async function handler(
     let jobs: Job[] = []
     const processedUrls = new Set<string>()
     
-    // For Anthropic, let's try to find API endpoints or data in the HTML
-    if (isAnthropic) {
-      console.log('🔍 Searching for Anthropic API endpoints...')
+    // For Anthropic/DeepMind, let's try to find API endpoints or data in the HTML
+    if (isAnthropic || isDeepMind) {
+      console.log(`🔍 Searching for ${companyName} API endpoints...`)
       
       // Look for potential API endpoints in the HTML
       const apiMatches = html.match(/(https?:\/\/[^\s"']+(?:api|jobs|careers)[^\s"']*)/gi)
@@ -310,8 +312,9 @@ export default async function handler(
         console.log('📊 Found potential job data in scripts:', jsonMatches.length, 'matches')
       }
       
-      // Try the specific Anthropic job board URL first (support pagination)
-      console.log('🎯 Trying Anthropic Greenhouse job board with pagination...')
+      // Try the specific Greenhouse job board URL first (support pagination)
+      const companySlug = isAnthropic ? 'anthropic' : 'deepmind'
+      console.log(`🎯 Trying ${companyName} Greenhouse job board with pagination...`)
       
       // Collect jobs from all pages (focus on first 3 pages for better performance)
       const allJobs: any[] = []
@@ -323,8 +326,8 @@ export default async function handler(
         
         try {
           const pageUrl = page === 1 
-            ? 'https://job-boards.greenhouse.io/anthropic'
-            : `https://job-boards.greenhouse.io/anthropic?page=${page}`
+            ? `https://job-boards.greenhouse.io/${companySlug}`
+            : `https://job-boards.greenhouse.io/${companySlug}?page=${page}`
             
           const greenhouseResponse = await fetch(pageUrl, {
             headers: {
@@ -603,6 +606,7 @@ export default async function handler(
                 url: posting.url,
                 location: posting.jobLocation?.address?.addressLocality || 'Remote',
                 department: posting.occupationalCategory || 'Engineering',
+                company: companyName,
                 description: posting.description
               }
               
@@ -988,6 +992,7 @@ export default async function handler(
             url: jobLink.url,
             location: jobLink.location,
             department,
+            company: companyName,
             salary: salaryInfo.salary,
             salary_min: salaryInfo.min,
             salary_max: salaryInfo.max,
@@ -1093,6 +1098,7 @@ export default async function handler(
               url: href.startsWith('http') ? href : `${baseUrlForJob}${href}`,
               location: text.includes('Remote') ? 'Remote' : 'San Francisco',
               department: 'Engineering',
+              company: companyName,
               salary: salaryInfo.salary,
               salary_min: salaryInfo.min,
               salary_max: salaryInfo.max
@@ -1301,7 +1307,7 @@ export default async function handler(
     } // End of scrapingLogic function
 
     // Start scraping in background and return immediately
-    const companyName = isAnthropic ? 'Anthropic' : isOpenAI ? 'OpenAI' : 'Unknown'
+    const companyName = isAnthropic ? 'Anthropic' : isOpenAI ? 'OpenAI' : isDeepMind ? 'DeepMind' : 'Unknown'
     
     // Execute scraping logic in background (no await)
     Promise.race([scrapingLogic(), timeoutPromise])

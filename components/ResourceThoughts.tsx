@@ -2,43 +2,45 @@ import { useState, useEffect } from 'react'
 import UserInteractionButtons from './UserInteractionButtons'
 import AuthenticatedWriteForm from './AuthenticatedWriteForm'
 
-interface JobThought {
+interface ResourceThought {
   id: string
-  job_id: string
+  resource_id: string
   user_id: string
-  thought_type: 'general' | 'pros' | 'cons' | 'questions' | 'preparation'
+  username: string
+  thought_type: 'general' | 'pros' | 'cons' | 'questions' | 'experience'
   content: string
   rating?: number
-  is_interested: boolean
+  is_helpful: boolean
   created_at: string
   updated_at: string
 }
 
-interface JobThoughtsProps {
-  jobId: string
+interface ResourceThoughtsProps {
+  resourceId: string
+  isPublic?: boolean
   onShowToast?: (message: string) => void
 }
 
-export default function JobThoughts({ jobId, onShowToast }: JobThoughtsProps) {
-  const [thoughts, setThoughts] = useState<JobThought[]>([])
+export default function ResourceThoughts({ resourceId, isPublic = true, onShowToast }: ResourceThoughtsProps) {
+  const [thoughts, setThoughts] = useState<ResourceThought[]>([])
   const [loading, setLoading] = useState(false)
   const [showAddForm, setShowAddForm] = useState(false)
-  const [editingThought, setEditingThought] = useState<JobThought | null>(null)
+  const [editingThought, setEditingThought] = useState<ResourceThought | null>(null)
   
   // Form state
-  const [thoughtType, setThoughtType] = useState<JobThought['thought_type']>('general')
+  const [thoughtType, setThoughtType] = useState<ResourceThought['thought_type']>('general')
   const [content, setContent] = useState('')
   const [rating, setRating] = useState<number>(3)
-  const [isInterested, setIsInterested] = useState(true)
+  const [isHelpful, setIsHelpful] = useState(true)
 
   useEffect(() => {
     fetchThoughts()
-  }, [jobId])
+  }, [resourceId])
 
   const fetchThoughts = async () => {
     setLoading(true)
     try {
-      const response = await fetch(`/api/job-thoughts?job_id=${jobId}`)
+      const response = await fetch(`/api/resource-thoughts?resource_id=${resourceId}`)
       const data = await response.json()
       if (data.success) {
         setThoughts(data.data)
@@ -57,8 +59,8 @@ export default function JobThoughts({ jobId, onShowToast }: JobThoughtsProps) {
 
     try {
       const url = editingThought 
-        ? `/api/job-thoughts/${editingThought.id}`
-        : '/api/job-thoughts'
+        ? `/api/resource-thoughts/${editingThought.id}`
+        : '/api/resource-thoughts'
       
       const method = editingThought ? 'PUT' : 'POST'
       
@@ -66,24 +68,19 @@ export default function JobThoughts({ jobId, onShowToast }: JobThoughtsProps) {
         method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          job_id: jobId,
+          resource_id: resourceId,
           thought_type: thoughtType,
           content,
           rating,
-          is_interested: isInterested
+          is_helpful: isHelpful
         })
       })
 
       const data = await response.json()
       
       if (!response.ok) {
-        // Handle specific error messages
         if (response.status === 400 && data.error) {
           onShowToast?.(`⚠️ ${data.error}`)
-          // If job not found, notify parent component
-          if (data.error.includes('Job not found')) {
-            console.error('Job not found in database:', jobId)
-          }
         } else {
           onShowToast?.('❌ Failed to save thought')
         }
@@ -105,7 +102,7 @@ export default function JobThoughts({ jobId, onShowToast }: JobThoughtsProps) {
     if (!confirm('Are you sure you want to delete this thought?')) return
 
     try {
-      const response = await fetch(`/api/job-thoughts/${thoughtId}`, {
+      const response = await fetch(`/api/resource-thoughts/${thoughtId}`, {
         method: 'DELETE'
       })
 
@@ -126,7 +123,7 @@ export default function JobThoughts({ jobId, onShowToast }: JobThoughtsProps) {
     setThoughtType('general')
     setContent('')
     setRating(3)
-    setIsInterested(true)
+    setIsHelpful(true)
   }
 
   const thoughtTypeColors = {
@@ -134,7 +131,7 @@ export default function JobThoughts({ jobId, onShowToast }: JobThoughtsProps) {
     pros: 'bg-green-100 text-green-800',
     cons: 'bg-red-100 text-red-800',
     questions: 'bg-blue-100 text-blue-800',
-    preparation: 'bg-purple-100 text-purple-800'
+    experience: 'bg-purple-100 text-purple-800'
   }
 
   const thoughtTypeIcons = {
@@ -142,13 +139,20 @@ export default function JobThoughts({ jobId, onShowToast }: JobThoughtsProps) {
     pros: '✅',
     cons: '❌',
     questions: '❓',
-    preparation: '📚'
+    experience: '📝'
   }
 
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
-        <h3 className="text-lg font-semibold">My Thoughts & Notes</h3>
+        <div>
+          <h3 className="text-lg font-semibold">Community Thoughts</h3>
+          {isPublic ? (
+            <p className="text-sm text-gray-500">Share your experience with this resource</p>
+          ) : (
+            <p className="text-sm text-gray-500">This is a private resource</p>
+          )}
+        </div>
         <button
           onClick={() => setShowAddForm(true)}
           className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
@@ -161,21 +165,21 @@ export default function JobThoughts({ jobId, onShowToast }: JobThoughtsProps) {
       {(showAddForm || editingThought) && !editingThought && (
         <AuthenticatedWriteForm
           type="thought"
-          targetId={jobId}
-          targetType="job"
-          placeholder="Write your thoughts, questions, or notes about this position..."
+          targetId={resourceId}
+          targetType="resource"
+          placeholder="Share your thoughts, experience, or questions about this resource..."
           buttonText="Add Thought"
           onSubmit={async (data) => {
             const extendedData = {
-              job_id: jobId,
+              resource_id: resourceId,
               thought_type: 'general',
               content: data.content,
               rating: 3,
-              is_interested: true,
+              is_helpful: true,
               visibility: data.visibility
             }
             
-            const response = await fetch('/api/job-thoughts', {
+            const response = await fetch('/api/resource-thoughts', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify(extendedData)
@@ -205,20 +209,20 @@ export default function JobThoughts({ jobId, onShowToast }: JobThoughtsProps) {
               </label>
               <select
                 value={thoughtType}
-                onChange={(e) => setThoughtType(e.target.value as JobThought['thought_type'])}
+                onChange={(e) => setThoughtType(e.target.value as ResourceThought['thought_type'])}
                 className="w-full border rounded px-3 py-2"
               >
                 <option value="general">General Thoughts</option>
-                <option value="pros">Pros / Advantages</option>
-                <option value="cons">Cons / Concerns</option>
-                <option value="questions">Questions to Ask</option>
-                <option value="preparation">Interview Preparation</option>
+                <option value="pros">Pros / Benefits</option>
+                <option value="cons">Cons / Issues</option>
+                <option value="questions">Questions</option>
+                <option value="experience">My Experience</option>
               </select>
             </div>
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Interest Level (1-5 stars)
+                Rating (1-5 stars)
               </label>
               <div className="flex items-center gap-2">
                 {[1, 2, 3, 4, 5].map((star) => (
@@ -244,7 +248,7 @@ export default function JobThoughts({ jobId, onShowToast }: JobThoughtsProps) {
               onChange={(e) => setContent(e.target.value)}
               rows={4}
               className="w-full border rounded px-3 py-2"
-              placeholder="Write your thoughts, questions, or notes about this position..."
+              placeholder="Share your thoughts, experience, or questions about this resource..."
               required
             />
           </div>
@@ -253,11 +257,11 @@ export default function JobThoughts({ jobId, onShowToast }: JobThoughtsProps) {
             <label className="flex items-center gap-2">
               <input
                 type="checkbox"
-                checked={isInterested}
-                onChange={(e) => setIsInterested(e.target.checked)}
+                checked={isHelpful}
+                onChange={(e) => setIsHelpful(e.target.checked)}
                 className="w-4 h-4"
               />
-              <span className="text-sm">I'm interested in this position</span>
+              <span className="text-sm">This resource was helpful</span>
             </label>
           </div>
 
@@ -286,8 +290,8 @@ export default function JobThoughts({ jobId, onShowToast }: JobThoughtsProps) {
         </div>
       ) : thoughts.length === 0 ? (
         <div className="text-center py-8 text-gray-500">
-          <div className="text-4xl mb-2">📝</div>
-          <p>No thoughts yet. Add your first thought!</p>
+          <div className="text-4xl mb-2">💬</div>
+          <p>No thoughts yet. {isPublic ? 'Be the first to share your experience!' : 'Start a discussion about this resource.'}</p>
         </div>
       ) : (
         <div className="space-y-3">
@@ -305,8 +309,9 @@ export default function JobThoughts({ jobId, onShowToast }: JobThoughtsProps) {
                       ))}
                     </div>
                   )}
-                  {!thought.is_interested && (
-                    <span className="text-xs text-red-600">Not interested</span>
+                  <span className="text-xs text-gray-500">by @{thought.username}</span>
+                  {!thought.is_helpful && (
+                    <span className="text-xs text-red-600">Not helpful</span>
                   )}
                 </div>
                 <div className="flex gap-2">
@@ -316,7 +321,7 @@ export default function JobThoughts({ jobId, onShowToast }: JobThoughtsProps) {
                       setThoughtType(thought.thought_type)
                       setContent(thought.content)
                       setRating(thought.rating || 3)
-                      setIsInterested(thought.is_interested)
+                      setIsHelpful(thought.is_helpful)
                       setShowAddForm(false)
                     }}
                     className="text-blue-600 hover:text-blue-800 text-sm"
@@ -331,15 +336,18 @@ export default function JobThoughts({ jobId, onShowToast }: JobThoughtsProps) {
                   </button>
                 </div>
               </div>
-              <p className="text-gray-700 whitespace-pre-wrap">{thought.content}</p>
               
-              {/* Vote and Bookmark buttons */}
-              <div className="mt-3 pt-3 border-t border-gray-100">
-                <UserInteractionButtons
-                  targetType="thought"
-                  targetId={thought.id}
-                />
-              </div>
+              <p className="text-gray-700 whitespace-pre-wrap mb-3">{thought.content}</p>
+              
+              {/* Vote and Bookmark buttons for thoughts (only if public) */}
+              {isPublic && (
+                <div className="mt-3 pt-3 border-t border-gray-100">
+                  <UserInteractionButtons
+                    targetType="thought"
+                    targetId={thought.id}
+                  />
+                </div>
+              )}
               
               <p className="text-xs text-gray-500 mt-2">
                 {new Date(thought.created_at).toLocaleString()}

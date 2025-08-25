@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import PaperInsights from './PaperInsights'
+import UserInteractionButtons from './UserInteractionButtons'
 
 interface Paper {
   id: string
@@ -57,6 +58,8 @@ export default function PapersTab({
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedCompany, setSelectedCompany] = useState('')
   const [selectedYear, setSelectedYear] = useState('')
+  const [displayCount, setDisplayCount] = useState(20) // Initial papers to show
+  const [isLoadingMore, setIsLoadingMore] = useState(false)
   
   // Debug effect to monitor props changes
   useEffect(() => {
@@ -68,8 +71,8 @@ export default function PapersTab({
   const [extracting, setExtracting] = useState(false)
   const [extractedPaper, setExtractedPaper] = useState<Paper | null>(null)
   const [expandedPaperId, setExpandedPaperId] = useState<string | null>(null)
-
-  // Filter and sort papers
+  
+  // Filter and sort papers (moved up to be used in useEffect)
   const filteredPapers = papers.filter(paper => {
     const matchesSearch = searchTerm === '' || 
       paper.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -94,6 +97,32 @@ export default function PapersTab({
         return 0
     }
   })
+  
+  // Infinite scroll detection
+  useEffect(() => {
+    const handleScroll = () => {
+      if (isLoadingMore) return
+      
+      const scrollPosition = window.innerHeight + window.scrollY
+      const threshold = document.documentElement.scrollHeight - 1000 // Load more when 1000px from bottom
+      
+      if (scrollPosition >= threshold && displayCount < filteredPapers.length) {
+        setIsLoadingMore(true)
+        setTimeout(() => {
+          setDisplayCount(prev => Math.min(prev + 20, filteredPapers.length))
+          setIsLoadingMore(false)
+        }, 300) // Small delay for smooth experience
+      }
+    }
+    
+    window.addEventListener('scroll', handleScroll)
+    return () => window.removeEventListener('scroll', handleScroll)
+  }, [displayCount, filteredPapers.length, isLoadingMore])
+
+  // Reset display count when filters change
+  useEffect(() => {
+    setDisplayCount(20)
+  }, [searchTerm, selectedCompany, selectedYear, sortBy])
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
@@ -183,6 +212,13 @@ export default function PapersTab({
             {!hydrated ? 'Loading...' : (scraping ? 'Scraping...' : '📥 Scrape Anthropic Papers')}
           </button>
           <button
+            onClick={() => onScrapePapers('deepmind')}
+            disabled={!hydrated || scraping}
+            className="bg-gray-600 text-white px-4 py-2 rounded hover:bg-gray-700 disabled:opacity-50"
+          >
+            {!hydrated ? 'Loading...' : (scraping ? 'Scraping...' : '📥 Scrape DeepMind Papers')}
+          </button>
+          <button
             onClick={() => setShowAddPaperModal(true)}
             className="bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700"
           >
@@ -233,6 +269,7 @@ export default function PapersTab({
             <option value="">All Companies</option>
             <option value="openai">OpenAI</option>
             <option value="anthropic">Anthropic</option>
+            <option value="deepmind">DeepMind</option>
           </select>
           <select
             value={selectedYear}
@@ -269,7 +306,7 @@ export default function PapersTab({
             <p className="text-sm">Try scraping papers or adjusting your search filters</p>
           </div>
         ) : (
-          filteredPapers.map((paper) => (
+          filteredPapers.slice(0, displayCount).map((paper) => (
             <div key={paper.id} className="bg-white p-6 rounded-lg shadow-sm border hover:shadow-md transition-shadow">
               <div className="flex justify-between items-start mb-3">
                 <div className="flex-1">
@@ -280,9 +317,13 @@ export default function PapersTab({
                     <span className={`px-2 py-1 rounded text-xs font-medium ${
                       paper.company.toLowerCase() === 'openai' 
                         ? 'bg-green-100 text-green-800' 
-                        : 'bg-blue-100 text-blue-800'
+                        : paper.company.toLowerCase() === 'anthropic'
+                        ? 'bg-blue-100 text-blue-800'
+                        : paper.company.toLowerCase() === 'deepmind'
+                        ? 'bg-gray-100 text-gray-800'
+                        : 'bg-gray-100 text-gray-800'
                     }`}>
-                      {paper.company.toLowerCase() === 'openai' ? 'OpenAI' : 'Anthropic'}
+                      {paper.company}
                     </span>
                     <span className="px-2 py-1 bg-gray-100 text-gray-800 rounded text-xs">
                       {formatDate(paper.publication_date)}
@@ -356,6 +397,15 @@ export default function PapersTab({
                 </button>
               </div>
 
+              {/* Vote and Bookmark buttons */}
+              <div className="mt-4 pt-4 border-t border-gray-100">
+                <UserInteractionButtons
+                  targetType="paper"
+                  targetId={paper.id}
+                  itemTitle={paper.title}
+                />
+              </div>
+
               {/* Expandable Insights Section */}
               {expandedPaperId === paper.id && (
                 <div className="mt-4 pt-4 border-t border-gray-200">
@@ -369,6 +419,23 @@ export default function PapersTab({
           ))
         )}
       </div>
+      
+      {/* Load More Indicator */}
+      {filteredPapers.length > displayCount && (
+        <div className="text-center py-8">
+          {isLoadingMore ? (
+            <div className="flex justify-center items-center gap-2">
+              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-gray-600"></div>
+              <span className="text-gray-600">Loading more papers...</span>
+            </div>
+          ) : (
+            <div className="text-gray-500">
+              <p className="text-sm">Showing {displayCount} of {filteredPapers.length} papers</p>
+              <p className="text-xs">Scroll down to load more</p>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Add Paper Modal */}
       {showAddPaperModal && (

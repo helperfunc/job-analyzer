@@ -13,7 +13,6 @@ interface Paper {
   github_url?: string
   company: string
   tags: string[]
-  venue?: string
 }
 
 export default async function handler(
@@ -46,7 +45,7 @@ export default async function handler(
       try {
         // Launch Puppeteer with settings to bypass Cloudflare
         browser = await puppeteer.launch({
-          headless: true, // Using headless mode
+          headless: 'new', // Using new headless mode
           args: [
             '--no-sandbox',
             '--disable-setuid-sandbox',
@@ -106,13 +105,9 @@ export default async function handler(
             try {
               console.log(`💾 Saving paper ${i + 1}/${papers.length}: ${paper.title.substring(0, 50)}...`)
               
-              // Remove venue field before saving to database if it doesn't exist in schema
-              const paperForDb = { ...paper };
-              delete paperForDb.venue;
-              
               const { data, error } = await supabase
                 .from('research_papers')
-                .upsert([paperForDb], { 
+                .upsert([paper], { 
                   onConflict: 'url'
                 })
                 .select()
@@ -743,307 +738,517 @@ async function scrapeAnthropicWithPuppeteer(page: any, papers: Paper[]): Promise
   }
 }
 
-async function fetchDeepMindPaperDetails(page: any, paperUrl: string): Promise<{ abstract?: string; authors?: string[]; venue?: string }> {
-  try {
-    console.log(`🔍 Fetching details for: ${paperUrl}`);
-    await page.goto(paperUrl, { waitUntil: 'networkidle2', timeout: 30000 });
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    
-    const content = await page.content();
-    const $ = cheerio.load(content);
-    
-    let abstract = '';
-    let authors: string[] = [];
-    let venue = '';
-    
-    // Extract abstract
-    const abstractSelectors = [
-      '.abstract',
-      'section.abstract p',
-      '[class*="abstract"]',
-      'h2:contains("Abstract") + p',
-      'h2:contains("abstract") + p',
-      'h3:contains("Abstract") + p'
-    ];
-    
-    for (const selector of abstractSelectors) {
-      const abstractText = $(selector).text().trim();
-      if (abstractText && abstractText.length > 50) {
-        abstract = abstractText;
-        break;
-      }
-    }
-    
-    // Extract authors
-    const authorSelectors = [
-      '.publication-authors li',
-      '.authors li',
-      '[class*="author"] li',
-      '.publication-metadata li'
-    ];
-    
-    for (const selector of authorSelectors) {
-      const authorElements = $(selector);
-      if (authorElements.length > 0) {
-        authorElements.each((_, el) => {
-          const author = $(el).text().trim();
-          if (author && author.length > 2 && !author.includes('Published') && !author.includes('Venue')) {
-            authors.push(author);
-          }
-        });
-        if (authors.length > 0) break;
-      }
-    }
-    
-    // Extract venue
-    const venueMatch = content.match(/Venue:\s*([^\n<]+)/i) || 
-                      content.match(/(ICCV|CVPR|NeurIPS|ICML|ECCV|ICLR|AAAI|IJCAI|ACL|EMNLP|arXiv|Nature|Science)\s*\d{0,4}/i);
-    if (venueMatch) {
-      venue = venueMatch[1].trim();
-    }
-    
-    return { abstract, authors: authors.length > 0 ? authors : undefined, venue };
-    
-  } catch (error) {
-    console.error(`Error fetching paper details for ${paperUrl}:`, error);
-    return {};
-  }
-}
-
 async function scrapeDeepMindWithPuppeteer(page: any, papers: Paper[]): Promise<void> {
   try {
-    console.log('🚀 Starting DeepMind papers scraping with pagination...');
+    console.log('🚀 Starting DeepMind papers scraping...')
     
-    let currentPage = 1;
-    let hasNextPage = true;
-    let consecutiveEmptyPages = 0;
-    const maxPages = 20; // Safety limit to prevent infinite loops
-    const maxConsecutiveEmptyPages = 3;
+    const url = 'https://deepmind.google/research/publications/'
+    console.log(`📄 Navigating to ${url}...`)
     
-    while (hasNextPage && currentPage <= maxPages && consecutiveEmptyPages < maxConsecutiveEmptyPages) {
-      const url = currentPage === 1 
-        ? 'https://deepmind.google/research/publications/'
-        : `https://deepmind.google/research/publications/?page=${currentPage}`;
+    await page.goto(url, { 
+      waitUntil: 'networkidle2', 
+      timeout: 60000 
+    })
+    
+    // Wait for content to load
+    await new Promise(resolve => setTimeout(resolve, 8000))
+    
+    // Wait for specific elements that indicate papers are loaded
+    try {
+      await page.waitForSelector('a[href*="/research/publications/"]', { timeout: 10000 })
+      console.log('✅ Found publication links on page')
       
-      console.log(`📄 Navigating to page ${currentPage}: ${url}...`);
+      // Check if content is dynamically loaded
+      const linkCount = await page.evaluate(() => {
+        return document.querySelectorAll('a[href*="/research/publications/"]').length
+      })
+      console.log(`📊 Found ${linkCount} publication links via JavaScript`)
       
-      await page.goto(url, { 
-        waitUntil: 'networkidle2', 
-        timeout: 60000 
-      });
-      
-      // Wait for content to load
-      await new Promise(resolve => setTimeout(resolve, 3000));
-      
-      const content = await page.content();
-      console.log(`📄 Page ${currentPage} content length: ${content.length}`);
-      
-      const $ = cheerio.load(content);
-      
-      // Track papers found on this page
-      const papersBeforeThisPage = papers.length;
-      
-      // Look for publication items on this page
-      // DeepMind uses a structured layout with publication-item divs or similar containers
-      const publicationSelectors = [
-        '.publication-item',
-        '[class*="publication"]',
-        'article',
-        'div[data-testid*="publication"]',
-        '.item',
-        '.card'
-      ];
-      
-      let publicationItems = $();
-      for (const selector of publicationSelectors) {
-        const items = $(selector);
-        if (items.length > 0) {
-          publicationItems = items;
-          console.log(`📋 Found ${items.length} items using selector: ${selector}`);
-          break;
-        }
-      }
-      
-      // If no structured items found, fall back to link-based extraction
-      if (publicationItems.length === 0) {
-        console.log('⚠️ No structured publication items found, using link-based extraction');
-        publicationItems = $('a[href*="/research/publications/"]').parent();
-      }
-      
-      publicationItems.each((_, element) => {
-        const $item = $(element);
-        const itemHtml = $item.html() || '';
-        const itemText = $item.text();
+      // Try to wait for specific content
+      await page.waitForFunction(
+        () => {
+          const links = document.querySelectorAll('a[href*="/research/publications/"]')
+          return links.length > 5 // Wait until we have at least 5 paper links
+        },
+        { timeout: 15000 }
+      )
+    } catch (e) {
+      console.log('⚠️ Timeout waiting for papers to load:', e.message)
+    }
+    
+    // Take a screenshot for debugging (optional)
+    // await page.screenshot({ path: 'deepmind-page.png' })
+    
+    // Log page title to verify we're on the right page
+    const pageTitle = await page.title()
+    console.log(`📄 Page title: "${pageTitle}"`)
+    
+    // Try to load more papers by scrolling and clicking "Load more" if available
+    let loadMoreAttempts = 0
+    const maxAttempts = 15 // Increased for 12 pages
+    
+    console.log(`🔄 Looking for more papers across multiple pages...`)
+    
+    while (loadMoreAttempts < maxAttempts) {
+      try {
+        loadMoreAttempts++
         
-        // Extract the publication link and title
-        const $titleLink = $item.find('a[href*="/research/publications/"]').first();
-        if ($titleLink.length === 0) {
-          return;
-        }
+        // Scroll to bottom to trigger lazy loading
+        await page.evaluate(() => {
+          window.scrollTo(0, document.body.scrollHeight)
+        })
         
-        const href = $titleLink.attr('href') || '';
-        const title = $titleLink.text().trim();
+        await new Promise(resolve => setTimeout(resolve, 3000)) // Longer wait
         
-        // Skip navigation links and empty titles
-        if (!title || title.length < 10 || 
-            href === '/research/publications/' || 
-            href === '/research/publications' ||
-            title.toLowerCase() === 'publications' ||
-            title.toLowerCase() === 'research') {
-          return;
-        }
-        
-        const fullUrl = href.startsWith('http') ? href : `https://deepmind.google${href}`;
-        
-        // Check for duplicates
-        const existingPaper = papers.find(p => p.url === fullUrl || p.title === title);
-        if (existingPaper) {
-          return;
-        }
-        
-        // Extract structured data from the publication item
-        let publicationDate = '2024-01-01';
-        let authors: string[] = [];
-        let venue = '';
-        let abstract = '';
-        
-        // Extract date - look for date patterns in the item
-        const datePatterns = [
-          /(\d{1,2})\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)(?:uary|ruary|ch|il|y|e|y|ust|tember|ober|ember|ember)\s+(\d{4})/i,
-          /(\d{1,2})\s+(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{4})/i,
-          /(\d{4})[-/](\d{1,2})[-/](\d{1,2})/,
-          /\b(202[0-9])\b/
-        ];
-        
-        for (const pattern of datePatterns) {
-          const dateMatch = itemText.match(pattern);
-          if (dateMatch) {
-            if (dateMatch[0].match(/^\d{4}$/)) {
-              publicationDate = `${dateMatch[0]}-01-01`;
-            } else if (dateMatch[0].match(/\d{4}[-/]\d{1,2}[-/]\d{1,2}/)) {
-              publicationDate = dateMatch[0].replace(/\//g, '-');
-            } else {
-              // Parse month-based dates
-              const monthMap: Record<string, string> = {
-                'jan': '01', 'january': '01', 'feb': '02', 'february': '02',
-                'mar': '03', 'march': '03', 'apr': '04', 'april': '04',
-                'may': '05', 'jun': '06', 'june': '06', 'jul': '07', 'july': '07',
-                'aug': '08', 'august': '08', 'sep': '09', 'september': '09',
-                'oct': '10', 'october': '10', 'nov': '11', 'november': '11',
-                'dec': '12', 'december': '12'
-              };
-              const day = dateMatch[1].padStart(2, '0');
-              const month = monthMap[dateMatch[2].toLowerCase().substring(0, 3)];
-              const year = dateMatch[3];
-              if (month) {
-                publicationDate = `${year}-${month}-${day}`;
-              }
-            }
-            break;
+        // Look for pagination buttons, load more buttons, and next page links
+        const loadMoreClicked = await page.evaluate(() => {
+          // Look for various types of pagination controls
+          const buttons = Array.from(document.querySelectorAll('button, a, [role="button"]'))
+          
+          // Try to find load more button
+          let loadMoreButton = buttons.find(btn => {
+            const text = btn.textContent?.toLowerCase() || ''
+            const ariaLabel = btn.getAttribute('aria-label')?.toLowerCase() || ''
+            return text.includes('load more') || 
+                   text.includes('show more') || 
+                   text.includes('view more') ||
+                   text.includes('see more') ||
+                   ariaLabel.includes('load more') ||
+                   ariaLabel.includes('next')
+          })
+          
+          // If no load more button, try pagination controls
+          if (!loadMoreButton) {
+            loadMoreButton = buttons.find(btn => {
+              const text = btn.textContent?.toLowerCase().trim() || ''
+              const ariaLabel = btn.getAttribute('aria-label')?.toLowerCase() || ''
+              return text === 'next' || 
+                     text.includes('→') || 
+                     text.includes('>') ||
+                     ariaLabel.includes('next page') ||
+                     (text.match(/^\d+$/) && parseInt(text) > 1) // Page numbers > 1
+            })
           }
-        }
-        
-        // Extract authors - look for author patterns after the title
-        const titleIndex = itemText.indexOf(title);
-        if (titleIndex !== -1) {
-          const afterTitle = itemText.substring(titleIndex + title.length);
           
-          // Look for author patterns
-          const authorPatterns = [
-            /^[,\s]*([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*(?:,\s*[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)*)/,
-            /Authors?:\s*([^,\n]+(?:,\s*[^,\n]+)*)/i,
-            /by\s+([^,\n]+(?:,\s*[^,\n]+)*)/i
-          ];
+          // Try clicking any button with "next" or pagination indicators
+          if (!loadMoreButton) {
+            loadMoreButton = buttons.find(btn => {
+              const classList = btn.className.toLowerCase()
+              return classList.includes('next') || 
+                     classList.includes('pagination') ||
+                     classList.includes('load') ||
+                     classList.includes('more')
+            })
+          }
           
-          for (const pattern of authorPatterns) {
-            const authorMatch = afterTitle.match(pattern);
-            if (authorMatch && authorMatch[1]) {
-              const authorString = authorMatch[1].trim();
-              // Split by comma and clean up
-              authors = authorString.split(/,\s*/)
-                .map(a => a.trim())
-                .filter(a => a.length > 2 && !a.match(/^\d/) && !a.includes('Conference') && !a.includes('Journal'));
-              
-              if (authors.length > 0) {
-                break;
-              }
+          if (loadMoreButton && loadMoreButton instanceof HTMLElement) {
+            // Check if button is visible and enabled
+            const isVisible = loadMoreButton.offsetWidth > 0 && loadMoreButton.offsetHeight > 0
+            const isEnabled = !loadMoreButton.hasAttribute('disabled') && 
+                             !loadMoreButton.classList.contains('disabled')
+            
+            if (isVisible && isEnabled) {
+              loadMoreButton.click()
+              return true
             }
           }
+          return false
+        })
+        
+        if (loadMoreClicked) {
+          console.log(`📥 Clicked pagination/load more (attempt ${loadMoreAttempts})`)
+          await new Promise(resolve => setTimeout(resolve, 4000)) // Longer wait for page load
           
-          // Look for venue information
-          const venueMatch = afterTitle.match(/(ICCV|CVPR|NeurIPS|ICML|ECCV|ICLR|AAAI|IJCAI|ACL|EMNLP|arXiv|Nature|Science|PNAS|Cell|PLOS)\s*\d{0,4}/i);
-          if (venueMatch) {
-            venue = venueMatch[0];
+          // Check if new content was loaded
+          const newContentLength = await page.evaluate(() => document.body.textContent?.length || 0)
+          console.log(`📊 Page content length after load: ${newContentLength}`)
+        } else {
+          console.log(`❌ No more pagination controls found (attempt ${loadMoreAttempts})`)
+          
+          // Try one more approach: look for specific DeepMind pagination patterns
+          const pageChanged = await page.evaluate(() => {
+            // Look for numbered pagination
+            const pageLinks = Array.from(document.querySelectorAll('a[href*="page"], a[href*="offset"], button[data-page]'))
+            const nextPageLink = pageLinks.find(link => {
+              const href = link.getAttribute('href') || ''
+              const text = link.textContent?.trim() || ''
+              return href.includes('page=2') || href.includes('offset=') || text.match(/^[2-9]|1[0-2]$/)
+            })
+            
+            if (nextPageLink && nextPageLink instanceof HTMLElement) {
+              nextPageLink.click()
+              return true
+            }
+            return false
+          })
+          
+          if (!pageChanged) {
+            break
           }
+          
+          await new Promise(resolve => setTimeout(resolve, 4000))
         }
+      } catch (e) {
+        console.log(`⚠️ Error on attempt ${loadMoreAttempts}:`, e)
+        break
+      }
+    }
+    
+    console.log(`🔄 Completed ${loadMoreAttempts} attempts to load more content`)
+    
+    const html = await page.content()
+    console.log(`📊 Page loaded, content length: ${html.length}`)
+    
+    const $ = cheerio.load(html)
+    
+    // Look for publication cards/articles on DeepMind's site
+    const selectors = [
+      // Try more specific selectors for DeepMind's site structure
+      'a[href^="/research/publications/"][href*="-"]', // Links to individual papers
+      'article.glue-card',
+      'div.glue-card',
+      '[class*="card"] a[href*="/research/publications/"]',
+      'div[class*="publication"]',
+      'div[class*="research-card"]',
+      'div[class*="paper"]',
+      'div[class*="result"]',
+      'li[class*="publication"]',
+      '[data-testid*="publication"]',
+      '.publication-item',
+      'article',
+      '[role="article"]'
+    ]
+    
+    const foundTitles = new Set<string>()
+    const foundUrls = new Set<string>()
+    
+    // First, let's see what we're working with
+    console.log('🔍 Debugging DeepMind page structure...')
+    
+    // Log all links that might be papers
+    const allLinks = $('a[href*="/research/publications/"]').toArray()
+    console.log(`📊 Found ${allLinks.length} links containing "/research/publications/"`)
+    
+    if (allLinks.length > 0) {
+      console.log('📋 Sample links:')
+      allLinks.slice(0, 10).forEach((link) => {
+        const href = $(link).attr('href')
+        const text = $(link).text().trim()
+        console.log(`  - ${href}: "${text.substring(0, 80)}..."`)
+      })
+    }
+    
+    // Look for paper titles in the correct elements
+    console.log('🔍 Looking for paper titles in list-compact__inner elements...')
+    
+    // First try to find papers using the specific class
+    $('.list-compact__inner').each((_, element) => {
+      const $elem = $(element)
+      const title = $elem.text().trim()
+      
+      // Find the parent link
+      const $link = $elem.closest('a')
+      const href = $link.attr('href') || ''
+      
+      if (title && href.includes('/research/publications/') && !foundTitles.has(title)) {
+        foundTitles.add(title)
         
-        // If no authors found, use DeepMind as default
-        if (authors.length === 0) {
-          authors = ['DeepMind Research Team'];
-        }
+        const paperUrl = href.startsWith('http') ? href : `https://deepmind.google${href}`
         
-        // Generate abstract based on title and venue
-        if (!abstract) {
-          abstract = `${venue ? `Published at ${venue}. ` : ''}Research publication from DeepMind exploring ${title.toLowerCase()}.`;
+        // Try to find date from parent elements
+        const $parent = $link.closest('article, div, li')
+        const parentText = $parent.text()
+        
+        let publication_date = '2024-01-01'
+        const dateMatch = parentText.match(/\b(202[0-9]|201[0-9])\b/)
+        if (dateMatch) {
+          publication_date = `${dateMatch[0]}-01-01`
         }
         
         papers.push({
-          title: title.substring(0, 200),
-          authors: authors,
-          publication_date: publicationDate,
-          abstract: abstract,
-          url: fullUrl,
+          title,
+          authors: ['DeepMind'],
+          publication_date,
+          abstract: 'Research publication from DeepMind.',
+          url: paperUrl,
           company: 'DeepMind',
-          tags: generateTags(title + ' ' + abstract + ' ' + venue),
-          venue: venue || undefined
-        });
+          tags: generateTags(title + ' deepmind')
+        })
         
-        console.log(`📝 Page ${currentPage}: Added paper "${title.substring(0, 50)}..." by ${authors.slice(0, 2).join(', ')}${authors.length > 2 ? ' et al.' : ''} (${publicationDate})`);
-      });
-      
-      const papersFoundOnThisPage = papers.length - papersBeforeThisPage;
-      console.log(`📊 Page ${currentPage}: Found ${papersFoundOnThisPage} new papers`);
-      
-      if (papersFoundOnThisPage === 0) {
-        consecutiveEmptyPages++;
-        console.log(`⚠️ No new papers found on page ${currentPage} (${consecutiveEmptyPages} consecutive empty pages)`);
-      } else {
-        consecutiveEmptyPages = 0;
+        console.log(`📝 Found paper: "${title}"`)
       }
+    })
+    
+    console.log(`📊 Found ${papers.length} papers via list-compact__inner elements`)
+    
+    // If no papers found, try a simpler approach - get all links that look like individual papers
+    if (papers.length === 0) {
+      const paperLinks = allLinks.filter(link => {
+        const href = $(link).attr('href') || ''
+        const text = $(link).text().trim()
+        // Individual paper links usually have slugs after /publications/
+        return href.match(/\/research\/publications\/[a-z0-9-]+$/i) && 
+               text.length > 10 && 
+               text.length < 300 &&
+               !text.includes('Research\n') &&
+               !text.includes('Publications') &&
+               !text.includes('Explore a selection')
+      })
+    
+    console.log(`📊 Found ${paperLinks.length} potential paper links`)
+    
+    // Process paper links directly
+    paperLinks.forEach((link) => {
+      const $link = $(link)
+      const href = $link.attr('href') || ''
+      const title = $link.text().trim()
       
-      // Check if there's a next page by looking for pagination elements
-      const hasNextPageElement = $('a[href*="page=' + (currentPage + 1) + '"]').length > 0 ||
-                                 $('a').filter((_, el) => $(el).text().trim().toLowerCase().includes('next')).length > 0 ||
-                                 $('[class*="next"]').length > 0 ||
-                                 $('[aria-label*="next"]').length > 0;
-      
-      // Also check if current page returned a valid response (not 404)
-      const pageTitle = $('title').text();
-      const isValidPage = !pageTitle.includes('404') && !pageTitle.includes('Not Found') && content.length > 1000;
-      
-      if (!hasNextPageElement || !isValidPage || papersFoundOnThisPage === 0) {
-        // Try one more page to be sure
-        if (consecutiveEmptyPages < maxConsecutiveEmptyPages) {
-          console.log(`🔍 Checking if page ${currentPage + 1} exists...`);
-          currentPage++;
-        } else {
-          hasNextPage = false;
-          console.log(`🏁 Stopping pagination: reached ${consecutiveEmptyPages} consecutive empty pages`);
+      if (title && !foundTitles.has(title)) {
+        foundTitles.add(title)
+        
+        const paperUrl = href.startsWith('http') ? href : `https://deepmind.google${href}`
+        
+        // Try to find date and abstract from parent elements
+        const $parent = $link.closest('article, div, li')
+        const parentText = $parent.text()
+        
+        let publication_date = '2024-01-01'
+        const dateMatch = parentText.match(/\b(202[0-9]|201[0-9])\b/)
+        if (dateMatch) {
+          publication_date = `${dateMatch[0]}-01-01`
         }
-      } else {
-        currentPage++;
-        console.log(`➡️ Moving to page ${currentPage}`);
+        
+        papers.push({
+          title,
+          authors: ['DeepMind'],
+          publication_date,
+          abstract: 'Research publication from DeepMind.',
+          url: paperUrl,
+          company: 'DeepMind',
+          tags: generateTags(title + ' deepmind')
+        })
+        
+        console.log(`📝 Found paper via direct link: "${title}"`)
+      }
+    })
+    
+    // Try a different approach - look for cards with specific structure
+    const cards = $('[class*="card"], article, .glue-card').toArray()
+    console.log(`📊 Found ${cards.length} potential card elements`)
+    
+    // Process cards to find papers
+    cards.forEach((card) => {
+      const $card = $(card)
+      
+      // Look for title in various places
+      let title = $card.find('h2, h3, h4, [class*="title"], [class*="heading"]').first().text().trim() ||
+                 $card.find('a').first().text().trim()
+      
+      // Look for URL
+      let paperUrl = $card.find('a[href*="/research/publications/"]').first().attr('href') ||
+                    $card.find('a').first().attr('href') || ''
+      
+      // Skip if no title or it's a navigation element
+      if (!title || title.length < 10 || foundTitles.has(title)) {
+        return
       }
       
-      // Small delay between pages to be respectful
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      // Extract date from card
+      const dateText = $card.text()
+      let publication_date = '2024-01-01'
+      const dateMatch = dateText.match(/\b(202[0-9]|201[0-9])\b/)
+      if (dateMatch) {
+        publication_date = `${dateMatch[0]}-01-01`
+      }
+      
+      // Extract description/abstract
+      const abstract = $card.find('p, [class*="description"], [class*="summary"]').first().text().trim() ||
+                      'Research publication from DeepMind.'
+      
+      if (title && paperUrl && paperUrl.includes('/research/publications/')) {
+        // Normalize URL
+        if (!paperUrl.startsWith('http')) {
+          paperUrl = `https://deepmind.google${paperUrl.startsWith('/') ? '' : '/'}${paperUrl}`
+        }
+        
+        foundTitles.add(title)
+        foundUrls.add(paperUrl)
+        
+        papers.push({
+          title,
+          authors: ['DeepMind'],
+          publication_date,
+          abstract: abstract.substring(0, 500) + (abstract.length > 500 ? '...' : ''),
+          url: paperUrl,
+          company: 'DeepMind',
+          tags: generateTags(title + ' ' + abstract + ' deepmind')
+        })
+        
+        console.log(`📝 Found paper: "${title}" (${publication_date})`)
+      }
+    })
+    
+    // If still no papers, try the original selector approach
+    if (papers.length === 0) {
+      console.log('⚠️ No papers found with card approach, trying selectors...')
+      
+      for (const selector of selectors) {
+        $(selector).each((_, element) => {
+          const $elem = $(element)
+        
+        // Extract title
+        let title = $elem.find('h2, h3, h4').first().text().trim() ||
+                   $elem.find('[class*="title"]').first().text().trim() ||
+                   $elem.find('a').first().text().trim()
+        
+        // Extract URL
+        let paperUrl = $elem.find('a[href*="/research/publications/"]').first().attr('href') ||
+                      $elem.find('a').first().attr('href') ||
+                      $elem.attr('href') || ''
+        
+        // Skip if we've already seen this title or URL
+        if (!title || foundTitles.has(title) || (paperUrl && foundUrls.has(paperUrl))) {
+          return
+        }
+        
+        // Skip navigation elements and page headers
+        if (title.length < 10 || title.length > 300 || 
+            /^(Research|Publications|About|Blog|Careers)$/i.test(title) ||
+            title.includes('Explore a selection of') ||
+            title.includes('\n')) {
+          return
+        }
+        
+        foundTitles.add(title)
+        if (paperUrl) foundUrls.add(paperUrl)
+        
+        // Normalize URL
+        if (paperUrl && !paperUrl.startsWith('http')) {
+          paperUrl = `https://deepmind.google${paperUrl.startsWith('/') ? '' : '/'}${paperUrl}`
+        }
+        
+        // Extract date
+        const dateText = $elem.find('[class*="date"], time').first().text().trim() ||
+                        $elem.text()
+        
+        let publication_date = '2024-01-01'
+        const dateMatch = dateText.match(/\b(202[0-9]|201[0-9])-(\d{1,2})-(\d{1,2})\b/) ||
+                         dateText.match(/\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+(\d{1,2}),?\s+(202[0-9]|201[0-9])\b/i) ||
+                         dateText.match(/\b(202[0-9]|201[0-9])\b/)
+        
+        if (dateMatch) {
+          try {
+            const dateStr = dateMatch[0]
+            const date = new Date(dateStr)
+            if (!isNaN(date.getTime())) {
+              publication_date = date.toISOString().split('T')[0]
+            }
+          } catch (e) {
+            // Keep default date
+          }
+        }
+        
+        // Extract abstract/description
+        const abstract = $elem.find('[class*="description"], [class*="abstract"], p').first().text().trim() ||
+                        $elem.find('p').first().text().trim() ||
+                        'Research publication from DeepMind.'
+        
+        // Extract authors if available
+        const authorsText = $elem.find('[class*="author"]').text().trim()
+        const authors = authorsText ? authorsText.split(/[,;]/).map(a => a.trim()).filter(a => a) : ['DeepMind']
+        
+        papers.push({
+          title,
+          authors,
+          publication_date,
+          abstract: abstract.substring(0, 500) + (abstract.length > 500 ? '...' : ''),
+          url: paperUrl || `https://deepmind.google/research/publications/`,
+          company: 'DeepMind',
+          tags: generateTags(title + ' ' + abstract + ' deepmind')
+        })
+        
+        console.log(`📝 Found paper: "${title}" (${publication_date})`)
+        })
+      }
     }
     
-    if (currentPage > maxPages) {
-      console.log(`🏁 Stopped at maximum page limit (${maxPages})`);
+    // Also try to extract papers from any JSON-LD structured data
+    const jsonLdScripts = $('script[type="application/ld+json"]').toArray()
+    for (const script of jsonLdScripts) {
+      try {
+        const data = JSON.parse($(script).html() || '{}')
+        if (data['@type'] === 'ScholarlyArticle' || data['@type'] === 'Article') {
+          const title = data.headline || data.name
+          if (title && !foundTitles.has(title)) {
+            foundTitles.add(title)
+            papers.push({
+              title,
+              authors: data.author ? (Array.isArray(data.author) ? data.author.map((a: any) => a.name || a) : [data.author.name || data.author]) : ['DeepMind'],
+              publication_date: data.datePublished || '2024-01-01',
+              abstract: data.description || 'Research publication from DeepMind.',
+              url: data.url || `https://deepmind.google/research/publications/`,
+              company: 'DeepMind',
+              tags: generateTags(title + ' ' + (data.description || '') + ' deepmind')
+            })
+            console.log(`📝 Found paper from JSON-LD: "${title}"`)
+          }
+        }
+      } catch (e) {
+        // Ignore JSON parsing errors
+      }
     }
     
-    console.log(`✅ Pagination complete! Scraped ${currentPage - 1} pages and found ${papers.length} papers total from DeepMind`);
+    console.log(`✅ Found ${papers.length} papers total from DeepMind`)
+    
+    // If we still have no papers, try one more approach using page evaluation
+    if (papers.length === 0) {
+      console.log('⚠️ No papers found via HTML parsing, trying page evaluation...')
+      
+      const evaluatedPapers = await page.evaluate(() => {
+        const links = Array.from(document.querySelectorAll('a[href*="/research/publications/"]'))
+        return links
+          .filter(link => {
+            const href = link.getAttribute('href') || ''
+            const text = link.textContent?.trim() || ''
+            return href.match(/\/research\/publications\/[a-z0-9-]+$/i) && 
+                   text.length > 10 && 
+                   text.length < 300
+          })
+          .map(link => ({
+            title: link.textContent?.trim() || '',
+            url: link.getAttribute('href') || '',
+            parentText: link.closest('article, div, li')?.textContent?.substring(0, 200) || ''
+          }))
+      })
+      
+      console.log(`📊 Found ${evaluatedPapers.length} papers via page evaluation`)
+      
+      evaluatedPapers.forEach(paper => {
+        if (paper.title && !foundTitles.has(paper.title)) {
+          const url = paper.url.startsWith('http') ? paper.url : `https://deepmind.google${paper.url}`
+          
+          let publication_date = '2024-01-01'
+          const dateMatch = paper.parentText.match(/\b(202[0-9]|201[0-9])\b/)
+          if (dateMatch) {
+            publication_date = `${dateMatch[0]}-01-01`
+          }
+          
+          papers.push({
+            title: paper.title,
+            authors: ['DeepMind'],
+            publication_date,
+            abstract: 'Research publication from DeepMind.',
+            url,
+            company: 'DeepMind',
+            tags: generateTags(paper.title + ' deepmind')
+          })
+          
+          console.log(`📝 Found paper via evaluation: "${paper.title}"`)
+        }
+      })
+    }
+    
+    console.log(`✅ Found ${papers.length} papers total from DeepMind`);
     
   } catch (error) {
     console.error('Error scraping DeepMind with Puppeteer:', error);
@@ -1080,5 +1285,5 @@ function generateTags(text: string): string[] {
     }
   });
   
-  return Array.from(new Set(tags)); // Remove duplicates
+  return [...new Set(tags)]; // Remove duplicates
 }

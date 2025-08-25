@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/router'
 import ResourcesTab from '../components/ResourcesTab'
+import UserInteractionButtons from '../components/UserInteractionButtons'
 
 interface Job {
   id: string
@@ -16,6 +17,8 @@ interface Job {
   url?: string
   description_url?: string
   created_at: string
+  isBookmarked?: boolean
+  userVote?: number | null
 }
 
 interface Paper {
@@ -1139,6 +1142,17 @@ export default function JobsPage() {
                 >
                   Add Resource
                 </button>
+              </div>
+
+              {/* User Interaction Buttons */}
+              <div className="mt-3 pt-3 border-t border-gray-100">
+                <UserInteractionButtons
+                  targetType="job"
+                  targetId={job.id}
+                  itemTitle={job.title}
+                  initialUserVote={job.userVote}
+                  initialIsBookmarked={job.isBookmarked}
+                />
               </div>
 
               {/* Linked Resources Display */}

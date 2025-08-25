@@ -72,6 +72,16 @@ export default function Navigation() {
                 Resources
               </Link>
               <Link
+                href="/projects"
+                className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${
+                  isActive('/projects') 
+                    ? 'border-blue-500 text-gray-900' 
+                    : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
+                }`}
+              >
+                Projects
+              </Link>
+              <Link
                 href="/guide"
                 className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${
                   isActive('/guide') 
@@ -81,6 +91,18 @@ export default function Navigation() {
               >
                 Guide
               </Link>
+              {user && (
+                <Link
+                  href="/recommendations"
+                  className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${
+                    isActive('/recommendations') 
+                      ? 'border-blue-500 text-gray-900' 
+                      : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
+                  }`}
+                >
+                  Recommendations
+                </Link>
+              )}
             </div>
           </div>
           
@@ -105,17 +127,14 @@ export default function Navigation() {
               </div>
             ) : (
               <div className="flex items-center space-x-4">
+                <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded">
+                  Guest Mode
+                </span>
                 <Link
-                  href="/auth"
-                  className="text-gray-700 hover:text-gray-900"
-                >
-                  Login
-                </Link>
-                <Link
-                  href="/auth"
+                  href="/login"
                   className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
                 >
-                  Sign Up
+                  Gmail Login
                 </Link>
               </div>
             )}

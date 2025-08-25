@@ -24,7 +24,8 @@ export default async function handler(
     // Get company parameter from query
     const { company } = req.query
     const companyFilter = company ? company.toString().toLowerCase() : 'openai'
-    const companyName = companyFilter.charAt(0).toUpperCase() + companyFilter.slice(1)
+    const companyName = companyFilter === 'deepmind' ? 'DeepMind' : 
+                        companyFilter.charAt(0).toUpperCase() + companyFilter.slice(1)
     
     console.log(`📊 Getting summary for company: ${companyFilter}`)
     

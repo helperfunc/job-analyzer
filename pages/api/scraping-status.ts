@@ -46,16 +46,17 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
 
     case 'POST':
       // Start scraping
+      const startTime = Date.now()
       scrapingStatus.set(company, { 
         isActive: true, 
-        startTime: now,
+        startTime: startTime,
         company: company 
       })
       console.log(`🔄 Started scraping status tracking for ${company}`)
       return res.json({ 
         success: true, 
         message: `Started scraping for ${company}`,
-        startTime: now
+        startTime: startTime
       })
 
     case 'DELETE':

@@ -43,7 +43,7 @@ export default async function handler(
     }
   } else if (req.method === 'POST') {
     try {
-      const { job_id, thought_type, content, rating, is_interested } = req.body
+      const { job_id, thought_type, content, rating, is_interested, visibility } = req.body
 
       if (!job_id || !content) {
         return res.status(400).json({
@@ -78,7 +78,8 @@ export default async function handler(
           content,
           rating,
           is_interested: is_interested !== undefined ? is_interested : true,
-          user_id: userId
+          user_id: userId,
+          visibility: visibility || 'public'
         }])
         .select()
         .single()

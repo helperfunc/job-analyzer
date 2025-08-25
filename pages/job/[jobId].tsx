@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/router'
 import JobThoughts from '../../components/JobThoughts'
+import UserInteractionButtons from '../../components/UserInteractionButtons'
 
 interface Job {
   id: string
@@ -550,6 +551,15 @@ export default function JobDetail() {
                   </span>
                 )}
               </div>
+              {/* Vote and Bookmark buttons */}
+              {job.id && (
+                <div className="mt-4">
+                  <UserInteractionButtons
+                    targetType="job"
+                    targetId={job.id}
+                  />
+                </div>
+              )}
             </div>
             <div className="flex gap-2">
               {!isJobSaved && (
@@ -623,7 +633,7 @@ export default function JobDetail() {
                 : 'text-gray-600 hover:text-gray-800'
             }`}
           >
-            My Thoughts
+            Thoughts
           </button>
         </div>
 

@@ -1,4 +1,6 @@
 import { useState, useEffect } from 'react'
+import UserInteractionButtons from './UserInteractionButtons'
+import AuthenticatedWriteForm from './AuthenticatedWriteForm'
 
 interface PaperInsight {
   id: string
@@ -162,7 +164,46 @@ export default function PaperInsights({ paperId, onShowToast }: PaperInsightsPro
       </div>
 
       {/* Add/Edit Form */}
-      {(showAddForm || editingInsight) && (
+      {(showAddForm || editingInsight) && !editingInsight && (
+        <AuthenticatedWriteForm
+          type="insight"
+          targetId={paperId}
+          targetType="paper"
+          placeholder="What did you learn? How can you apply this? What questions do you have?"
+          buttonText="Add Insight"
+          onSubmit={async (data) => {
+            const extendedData = {
+              paper_id: paperId,
+              insight: data.content,
+              thought_type: 'general',
+              rating: 3,
+              relevance_to_career: 3,
+              implementation_difficulty: 3,
+              visibility: data.visibility
+            }
+            
+            const response = await fetch('/api/paper-insights', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(extendedData)
+            })
+
+            const result = await response.json()
+            if (!response.ok) {
+              throw new Error(result.error || 'Failed to save insight')
+            }
+            
+            if (result.success) {
+              onShowToast?.('✅ Insight added successfully')
+              fetchInsights()
+              resetForm()
+            }
+          }}
+        />
+      )}
+      
+      {/* Edit Form - Legacy form for editing existing insights */}
+      {editingInsight && (
         <form onSubmit={handleSubmit} className="bg-purple-50 p-4 rounded-lg space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -223,7 +264,7 @@ export default function PaperInsights({ paperId, onShowToast }: PaperInsightsPro
               type="submit"
               className="bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700"
             >
-              {editingInsight ? 'Update' : 'Save'} Insight
+              Update Insight
             </button>
             <button
               type="button"
@@ -253,9 +294,9 @@ export default function PaperInsights({ paperId, onShowToast }: PaperInsightsPro
               <div className="flex justify-between items-start mb-2">
                 <div className="flex items-center gap-2">
                   <span className={`px-2 py-1 rounded text-xs font-medium ${
-                    thoughtTypeColors[insight.thought_type] || thoughtTypeColors.general
+                    thoughtTypeColors[insight.thought_type as keyof typeof thoughtTypeColors] || thoughtTypeColors.general
                   }`}>
-                    {thoughtTypeIcons[insight.thought_type] || thoughtTypeIcons.general} {insight.thought_type}
+                    {thoughtTypeIcons[insight.thought_type as keyof typeof thoughtTypeIcons] || thoughtTypeIcons.general} {insight.thought_type}
                   </span>
                 </div>
                 <div className="flex gap-2">
@@ -291,7 +332,7 @@ export default function PaperInsights({ paperId, onShowToast }: PaperInsightsPro
                     <span className="text-gray-600">Quality:</span>
                     <div className="flex text-yellow-500">
                       {[...Array(5)].map((_, i) => (
-                        <span key={i} className={i < insight.rating ? '' : 'opacity-30'}>★</span>
+                        <span key={i} className={i < (insight.rating || 0) ? '' : 'opacity-30'}>★</span>
                       ))}
                     </div>
                   </div>
@@ -301,7 +342,7 @@ export default function PaperInsights({ paperId, onShowToast }: PaperInsightsPro
                     <span className="text-gray-600">Career:</span>
                     <div className="flex text-blue-500">
                       {[...Array(5)].map((_, i) => (
-                        <span key={i} className={i < insight.relevance_to_career ? '' : 'opacity-30'}>★</span>
+                        <span key={i} className={i < (insight.relevance_to_career || 0) ? '' : 'opacity-30'}>★</span>
                       ))}
                     </div>
                   </div>
@@ -311,13 +352,21 @@ export default function PaperInsights({ paperId, onShowToast }: PaperInsightsPro
                     <span className="text-gray-600">Difficulty:</span>
                     <div className="flex text-red-500">
                       {[...Array(5)].map((_, i) => (
-                        <span key={i} className={i < insight.implementation_difficulty ? '' : 'opacity-30'}>★</span>
+                        <span key={i} className={i < (insight.implementation_difficulty || 0) ? '' : 'opacity-30'}>★</span>
                       ))}
                     </div>
                   </div>
                 )}
               </div>
 
+              {/* Vote and Bookmark buttons */}
+              <div className="mt-3 pt-3 border-t border-gray-100">
+                <UserInteractionButtons
+                  targetType="insight"
+                  targetId={insight.id}
+                />
+              </div>
+              
               <p className="text-xs text-gray-500 mt-2">
                 {new Date(insight.created_at).toLocaleString()}
               </p>

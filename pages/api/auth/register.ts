@@ -92,9 +92,27 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     if (insertError) {
       console.error('Error creating user:', insertError)
+      
+      // 提供更具体的错误信息
+      if (insertError.message.includes('row-level security policy')) {
+        return res.status(500).json({ 
+          error: 'Database configuration error',
+          details: 'User registration requires database setup. Please run the complete schema or disable RLS on users table.',
+          suggestion: 'ALTER TABLE users DISABLE ROW LEVEL SECURITY;'
+        })
+      }
+      
+      if (insertError.code === '23505') {
+        return res.status(409).json({ 
+          error: 'User already exists',
+          details: 'Username or email is already taken'
+        })
+      }
+      
       return res.status(500).json({ 
         error: 'Failed to create user',
-        details: insertError.message
+        details: insertError.message,
+        code: insertError.code
       })
     }
 

@@ -12,8 +12,10 @@ interface User {
 interface AuthContextType {
   user: User | null
   loading: boolean
+  isAuthenticated: boolean
   login: (email: string, password: string) => Promise<boolean>
-  register: (username: string, email: string, password: string, displayName?: string) => Promise<boolean>
+  register: (data: { username: string, email: string, password: string, displayName?: string }) => Promise<boolean>
+  loginWithGoogle: (googleUser: { id: string, email: string, name: string, picture?: string }) => Promise<boolean>
   logout: () => Promise<void>
   checkAuth: () => Promise<void>
 }
@@ -32,7 +34,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const checkAuth = async () => {
     try {
-      const response = await fetch('/api/auth/me', {
+      const response = await fetch('/api/auth/me-simple', {
         credentials: 'include'
       })
       
@@ -43,8 +45,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             id: data.user.id,
             username: data.user.username,
             email: data.user.email,
-            displayName: data.user.display_name,
-            isVerified: data.user.is_verified
+            displayName: data.user.displayName || data.user.display_name,
+            isVerified: data.user.isVerified || data.user.is_verified || true
           })
         } else {
           setUser(null)
@@ -89,18 +91,57 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
-  const register = async (
+  const register = async (data: { 
     username: string, 
     email: string, 
     password: string, 
-    displayName?: string
-  ): Promise<boolean> => {
+    displayName?: string 
+  }): Promise<boolean> => {
     try {
       const response = await fetch('/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ username, email, password, displayName })
+        body: JSON.stringify(data)
+      })
+
+      const responseData = await response.json()
+      
+      if (responseData.success) {
+        setUser({
+          id: responseData.user.id,
+          username: responseData.user.username,
+          email: responseData.user.email,
+          displayName: responseData.user.displayName,
+          isVerified: false
+        })
+        return true
+      }
+      
+      return false
+    } catch (error) {
+      console.error('Register error:', error)
+      return false
+    }
+  }
+
+  const loginWithGoogle = async (googleUser: { 
+    id: string, 
+    email: string, 
+    name: string, 
+    picture?: string 
+  }): Promise<boolean> => {
+    try {
+      const response = await fetch('/api/auth/google', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          googleId: googleUser.id,
+          email: googleUser.email,
+          name: googleUser.name,
+          picture: googleUser.picture
+        })
       })
 
       const data = await response.json()
@@ -111,14 +152,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           username: data.user.username,
           email: data.user.email,
           displayName: data.user.displayName,
-          isVerified: false
+          isVerified: data.user.isVerified
         })
         return true
       }
       
       return false
     } catch (error) {
-      console.error('Register error:', error)
+      console.error('Google login error:', error)
       return false
     }
   }
@@ -141,8 +182,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     <AuthContext.Provider value={{
       user,
       loading,
+      isAuthenticated: !!user,
       login,
       register,
+      loginWithGoogle,
       logout,
       checkAuth
     }}>

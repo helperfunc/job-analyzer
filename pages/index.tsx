@@ -94,7 +94,9 @@ export default function Home() {
   const pollScrapingStatus = () => {
     if (pollingIntervalRef.current) return // Already polling
     
-    console.log('🔄 Starting scraping status polling...')
+    const currentCompany = url.includes('anthropic.com') ? 'anthropic' : 
+                          url.includes('deepmind') ? 'deepmind' : 'openai'
+    console.log(`🔄 Starting scraping status polling for ${currentCompany}...`)
     let pollCount = 0
     const maxPolls = 200 // Stop polling after 16+ minutes (200 * 5 seconds) - enough for full scraping
     
@@ -131,8 +133,35 @@ export default function Home() {
         return
       }
       
+      // Also check if the scraping state matches the current URL
       try {
-        const currentCompany = url.includes('anthropic.com') ? 'anthropic' : 'openai'
+        const { url: scrapingUrl } = JSON.parse(currentScrapingState)
+        const scrapingCompany = scrapingUrl?.includes('anthropic.com') ? 'anthropic' : 
+                               scrapingUrl?.includes('deepmind') ? 'deepmind' : 'openai'
+        console.log(`📊 ScrapingState URL="${scrapingUrl}", company="${scrapingCompany}"`)
+      } catch (error) {
+        console.error('Error parsing scraping state:', error)
+      }
+      
+      try {
+        // Use the URL from scraping state, not current URL state (which might not be updated yet)
+        let effectiveUrl = url
+        let currentCompany = 'openai'
+        
+        try {
+          const { url: scrapingUrl } = JSON.parse(currentScrapingState)
+          if (scrapingUrl) {
+            effectiveUrl = scrapingUrl
+            currentCompany = scrapingUrl.includes('anthropic.com') ? 'anthropic' : 
+                            scrapingUrl.includes('deepmind') ? 'deepmind' : 'openai'
+            console.log(`📊 Using scraping URL="${effectiveUrl}", company="${currentCompany}"`)
+          }
+        } catch (error) {
+          // Fallback to current URL
+          currentCompany = url.includes('anthropic.com') ? 'anthropic' : 
+                          url.includes('deepmind') ? 'deepmind' : 'openai'
+          console.log(`📊 Fallback to current URL="${url}", company="${currentCompany}"`)
+        }
         
         // First, check the real scraping status from server
         const statusRes = await fetch(`/api/scraping-status?company=${currentCompany}&_t=${Date.now()}`)
@@ -192,12 +221,40 @@ export default function Home() {
           console.log(`📊 Scraping still active on server, continuing to wait... (poll ${pollCount}/${maxPolls})`)
         }
         
-        // Stop polling after max attempts
-        if (pollCount >= maxPolls) {
-          console.log('⏰ Polling timeout reached, stopping...')
+        // Stop polling after max attempts or force clear after 5 minutes for DeepMind
+        const shouldForceStop = pollCount >= maxPolls || 
+                               (currentCompany === 'deepmind' && pollCount >= 60) // 5 minutes for DeepMind
+        
+        if (shouldForceStop) {
+          console.log(`⏰ Polling timeout reached for ${currentCompany}, forcing stop...`)
+          
+          // Force clear server scraping status
+          try {
+            await fetch(`/api/scraping-status?company=${currentCompany}`, {
+              method: 'DELETE'
+            })
+            console.log(`🗑️ Force cleared server scraping status for ${currentCompany}`)
+          } catch (error) {
+            console.error('Error clearing server scraping status:', error)
+          }
+          
           setLoading(false)
           setScrapingInProgress(false)
           localStorage.removeItem('scraping-in-progress')
+          
+          // Try to load results even if polling timed out
+          try {
+            const res = await fetch(`/api/get-summary?company=${currentCompany}&_t=${Date.now()}`)
+            if (res.ok) {
+              const data = await res.json()
+              if (data.summary?.total_jobs > 0) {
+                console.log(`📊 Found ${data.summary.total_jobs} ${currentCompany} jobs after timeout`)
+                setResult(data)
+              }
+            }
+          } catch (error) {
+            console.error('Error loading results after timeout:', error)
+          }
           
           if (pollingIntervalRef.current) {
             clearInterval(pollingIntervalRef.current)
@@ -238,7 +295,8 @@ export default function Home() {
       
       console.log('🔄 Database is empty, auto-importing jobs...')
       
-      const currentCompany = url.includes('anthropic.com') ? 'anthropic' : 'openai'
+      const currentCompany = url.includes('anthropic.com') ? 'anthropic' : 
+                            url.includes('deepmind') ? 'deepmind' : 'openai'
       const jobs = resultData.summary.highest_paying_jobs.map((job, index) => ({
         id: getJobId(currentCompany, index),
         title: job.title,
@@ -279,11 +337,17 @@ export default function Home() {
       const scrapingState = localStorage.getItem('scraping-in-progress')
       if (scrapingState) {
         try {
-          const { isActive, timestamp } = JSON.parse(scrapingState)
+          const { isActive, timestamp, url: scrapingUrl } = JSON.parse(scrapingState)
           const now = Date.now()
-          const isStillActive = isActive && (now - timestamp) < 10 * 60 * 1000
+          const ageMinutes = Math.round((now - timestamp) / (60 * 1000))
           const ageSeconds = Math.round((now - timestamp) / 1000)
-          console.log(`🔍 Hydration scraping check: active=${isActive}, age=${ageSeconds}s, stillActive=${isStillActive}`)
+          
+          // Be more aggressive about clearing old scraping state for DeepMind
+          const isDeepMindScraping = scrapingUrl?.includes('deepmind')
+          const timeoutMinutes = isDeepMindScraping ? 5 : 10 // 5 minutes for DeepMind, 10 for others
+          const isStillActive = isActive && (now - timestamp) < timeoutMinutes * 60 * 1000
+          
+          console.log(`🔍 Hydration scraping check: active=${isActive}, age=${ageMinutes}m (${ageSeconds}s), deepmind=${isDeepMindScraping}, stillActive=${isStillActive}`)
           
           if (isStillActive) {
             console.log('🔧 Setting scraping state after hydration!')
@@ -296,9 +360,14 @@ export default function Home() {
               console.log('🔄 Starting post-hydration polling...')
               pollScrapingStatus()
             }, 500)
+          } else {
+            console.log(`🗑️ Clearing expired scraping state (${ageMinutes} minutes old)`)
+            localStorage.removeItem('scraping-in-progress')
           }
         } catch (error) {
           console.error('Error in hydration scraping check:', error)
+          // Clear corrupted state
+          localStorage.removeItem('scraping-in-progress')
         }
       } else {
         console.log('🎯 No scraping state found after hydration')
@@ -356,7 +425,8 @@ export default function Home() {
     const handleFocus = () => {
       // Don't reload data if scraping is in progress
       if (mounted && !result && !scrapingInProgress && !loading) {
-        const currentCompany = url.includes('anthropic.com') ? 'anthropic' : 'openai'
+        const currentCompany = url.includes('anthropic.com') ? 'anthropic' : 
+                              url.includes('deepmind') ? 'deepmind' : 'openai'
         loadCompanyData(url)
       }
     }
@@ -367,7 +437,8 @@ export default function Home() {
     const handleVisibilityChange = () => {
       // Don't reload data if scraping is in progress
       if (!document.hidden && mounted && !result && !scrapingInProgress && !loading) {
-        const currentCompany = url.includes('anthropic.com') ? 'anthropic' : 'openai'
+        const currentCompany = url.includes('anthropic.com') ? 'anthropic' : 
+                              url.includes('deepmind') ? 'deepmind' : 'openai'
         loadCompanyData(url)
       }
     }
@@ -405,7 +476,8 @@ export default function Home() {
     
     const loadData = async () => {
       // Check localStorage first
-      const currentCompany = url.includes('anthropic.com') ? 'anthropic' : 'openai'
+      const currentCompany = url.includes('anthropic.com') ? 'anthropic' : 
+                            url.includes('deepmind') ? 'deepmind' : 'openai'
       const cachedData = localStorage.getItem(`${currentCompany}-jobs-analysis-result`)
       
       if (cachedData) {
@@ -477,7 +549,9 @@ export default function Home() {
     }))
     
     // Clear saved results when starting new analysis
-    localStorage.removeItem('openai-jobs-analysis-result')
+    const currentCompany = url.includes('anthropic.com') ? 'anthropic' : 
+                          url.includes('deepmind') ? 'deepmind' : 'openai'
+    localStorage.removeItem(`${currentCompany}-jobs-analysis-result`)
 
     try {
       const res = await fetch('/api/scrape-with-puppeteer', {
@@ -496,13 +570,13 @@ export default function Home() {
       
       // Check if this is a "started" response (background scraping) or "completed" response
       if (data.success && data.status === 'started') {
-        console.log('✅ Background scraping started, beginning polling...')
+        console.log(`✅ Background scraping started for ${currentCompany}, beginning polling...`)
         setError('')
         
         // Start polling to detect completion
         setTimeout(() => {
           if (scrapingInProgress) {
-            console.log('🔄 Starting polling for background scraping...')
+            console.log(`🔄 Starting polling for background scraping of ${currentCompany}...`)
             pollScrapingStatus()
           }
         }, 2000) // Wait 2 seconds before starting polling
@@ -552,6 +626,7 @@ export default function Home() {
         // Clear localStorage
         localStorage.removeItem('openai-jobs-analysis-result')
         localStorage.removeItem('anthropic-jobs-analysis-result')
+        localStorage.removeItem('deepmind-jobs-analysis-result')
         
         alert(`✅ ${data.message}`)
       } else {
@@ -572,7 +647,11 @@ export default function Home() {
     setLoading(true)
     setError('')
     
-    const currentCompany = companyUrl.includes('anthropic.com') ? 'anthropic' : 'openai'
+    const currentCompany = companyUrl.includes('anthropic.com') ? 'anthropic' : 
+                          companyUrl.includes('deepmind') ? 'deepmind' : 'openai'
+    
+    // Clear any existing result when switching companies
+    setResult(null)
     
     try {
       const res = await fetch(`/api/get-summary?company=${currentCompany}&_t=${Date.now()}`, {
@@ -677,6 +756,21 @@ export default function Home() {
             >
               Anthropic
             </button>
+            <button
+              onClick={() => {
+                const newUrl = 'https://job-boards.greenhouse.io/deepmind'
+                setUrl(newUrl)
+                loadCompanyData(newUrl)
+              }}
+              disabled={!hydrated || loading || scrapingInProgress || navigating}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                url.includes('deepmind') 
+                  ? 'bg-green-100 text-green-700 border border-green-300' 
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
+            >
+              DeepMind
+            </button>
           </div>
 
           <div className="flex space-x-3">
@@ -687,6 +781,55 @@ export default function Home() {
             >
               {!hydrated ? 'Loading...' : (loading || scrapingInProgress ? 'Analyzing...' : 'Quick Job Analysis')}
             </button>
+            {scrapingInProgress && (
+              <button
+                onClick={async () => {
+                  const currentCompany = url.includes('anthropic.com') ? 'anthropic' : 
+                                        url.includes('deepmind') ? 'deepmind' : 'openai'
+                  
+                  console.log(`🔧 Manually resetting scraping state for ${currentCompany}`)
+                  
+                  // Clear local state
+                  setScrapingInProgress(false)
+                  setLoading(false)
+                  localStorage.removeItem('scraping-in-progress')
+                  
+                  // Clear polling
+                  if (pollingIntervalRef.current) {
+                    clearInterval(pollingIntervalRef.current)
+                    pollingIntervalRef.current = null
+                  }
+                  
+                  // Clear server scraping status
+                  try {
+                    await fetch(`/api/scraping-status?company=${currentCompany}`, {
+                      method: 'DELETE'
+                    })
+                    console.log(`🗑️ Cleared server scraping status for ${currentCompany}`)
+                  } catch (error) {
+                    console.error('Error clearing server scraping status:', error)
+                  }
+                  
+                  // Try to load any results
+                  try {
+                    const res = await fetch(`/api/get-summary?company=${currentCompany}&_t=${Date.now()}`)
+                    if (res.ok) {
+                      const data = await res.json()
+                      if (data.summary?.total_jobs > 0) {
+                        console.log(`📊 Loaded ${data.summary.total_jobs} ${currentCompany} jobs after reset`)
+                        setResult(data)
+                      }
+                    }
+                  } catch (error) {
+                    console.error('Error loading results after reset:', error)
+                  }
+                }}
+                className="bg-yellow-500 text-white px-4 py-3 rounded-lg hover:bg-yellow-600 transition-colors text-sm"
+                title="Clear scraping state if stuck"
+              >
+                🔧 Reset
+              </button>
+            )}
             {result && (
               <>
                 <button
@@ -745,6 +888,36 @@ export default function Home() {
             {process.env.NODE_ENV === 'development' && (
               <div className="text-xs mt-2 opacity-60">
                 Debug: loading={loading.toString()}, scrapingInProgress={scrapingInProgress.toString()}, mounted={mounted.toString()}
+                <br />
+                Current URL: {url}
+                <br />
+                Detected Company: {url.includes('anthropic.com') ? 'anthropic' : url.includes('deepmind') ? 'deepmind' : 'openai'}
+                {(() => {
+                  try {
+                    const scrapingState = localStorage.getItem('scraping-in-progress')
+                    if (scrapingState) {
+                      const { url: scrapingUrl } = JSON.parse(scrapingState)
+                      const scrapingCompany = scrapingUrl?.includes('anthropic.com') ? 'anthropic' : 
+                                             scrapingUrl?.includes('deepmind') ? 'deepmind' : 'openai'
+                      return (
+                        <>
+                          <br />
+                          Scraping URL: {scrapingUrl}
+                          <br />
+                          Scraping Company: {scrapingCompany}
+                        </>
+                      )
+                    }
+                  } catch (e) {
+                    return (
+                      <>
+                        <br />
+                        Error parsing scraping state: {e.message}
+                      </>
+                    )
+                  }
+                  return null
+                })()}
               </div>
             )}
           </div>
@@ -768,6 +941,7 @@ export default function Home() {
             <div className={`p-6 rounded-lg border ${
               result.company === 'OpenAI' ? 'bg-blue-50 border-blue-200' : 
               result.company === 'Anthropic' ? 'bg-purple-50 border-purple-200' : 
+              result.company === 'DeepMind' ? 'bg-green-50 border-green-200' :
               'bg-blue-50 border-blue-200'
             }`}>
               <h2 className="text-xl font-bold mb-4 text-gray-900">
@@ -797,7 +971,8 @@ export default function Home() {
                       <div className="flex-1">
                         <h3 className="font-semibold text-lg text-blue-600 hover:text-blue-800 cursor-pointer"
                              onClick={() => {
-                               const currentCompany = url.includes('anthropic.com') ? 'anthropic' : 'openai'
+                               const currentCompany = url.includes('anthropic.com') ? 'anthropic' : 
+                              url.includes('deepmind') ? 'deepmind' : 'openai'
                                const jobId = getJobId(currentCompany, index)
                                router.push(`/job/${jobId}?company=${currentCompany}&index=${index}`)
                              }}>{job.title}</h3>
@@ -805,7 +980,8 @@ export default function Home() {
                         <div className="mt-2 flex gap-2">
                           <button
                             onClick={() => {
-                              const currentCompany = url.includes('anthropic.com') ? 'anthropic' : 'openai'
+                              const currentCompany = url.includes('anthropic.com') ? 'anthropic' : 
+                              url.includes('deepmind') ? 'deepmind' : 'openai'
                               const jobId = getJobId(currentCompany, index)
                               router.push(`/job/${jobId}?company=${currentCompany}&index=${index}`)
                             }}
@@ -834,7 +1010,8 @@ export default function Home() {
                                 className="bg-blue-100 px-2 py-1 rounded text-xs cursor-pointer hover:bg-blue-200 transition-colors"
                                 onClick={(e) => {
                                   e.stopPropagation()
-                                  const currentCompany = url.includes('anthropic.com') ? 'anthropic' : 'openai'
+                                  const currentCompany = url.includes('anthropic.com') ? 'anthropic' : 
+                              url.includes('deepmind') ? 'deepmind' : 'openai'
                                   router.push(`/skill-jobs?skill=${encodeURIComponent(skill)}&company=${currentCompany}`)
                                 }}
                               >
@@ -878,7 +1055,8 @@ export default function Home() {
                     key={index} 
                     className="bg-white p-3 rounded-lg border cursor-pointer hover:shadow-md hover:bg-blue-50 transition-all"
                     onClick={() => {
-                      const currentCompany = url.includes('anthropic.com') ? 'anthropic' : 'openai'
+                      const currentCompany = url.includes('anthropic.com') ? 'anthropic' : 
+                              url.includes('deepmind') ? 'deepmind' : 'openai'
                       router.push(`/skill-jobs?skill=${encodeURIComponent(skill.skill)}&company=${currentCompany}`)
                     }}
                   >
@@ -930,6 +1108,17 @@ export default function Home() {
                     className="px-4 py-2 rounded-lg text-sm font-medium bg-purple-100 text-purple-700 border border-purple-300 hover:bg-purple-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                   >
                     Analyze Anthropic Jobs
+                  </button>
+                  <button
+                    onClick={() => {
+                      const newUrl = 'https://job-boards.greenhouse.io/deepmind'
+                      setUrl(newUrl)
+                      loadCompanyData(newUrl)
+                    }}
+                    disabled={!hydrated || loading || scrapingInProgress}
+                    className="px-4 py-2 rounded-lg text-sm font-medium bg-green-100 text-green-700 border border-green-300 hover:bg-green-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  >
+                    Analyze DeepMind Jobs
                   </button>
                 </div>
               </div>

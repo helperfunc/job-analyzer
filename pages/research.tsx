@@ -142,7 +142,7 @@ export default function Research() {
   const fetchAllPapers = async () => {
     setLoading(true)
     try {
-      const response = await fetch('/api/research/papers?limit=500')
+      const response = await fetch('/api/research/papers-simple?limit=500')
       const data = await response.json()
       if (data.success) {
         setPapers(data.data)
@@ -195,11 +195,20 @@ export default function Research() {
     console.log(`💾 Saved research scraping state:`, scrapingState)
     
     try {
-      console.log(`📡 Making API call to scrape ${company} papers...`)
-      const response = await fetch('/api/research/scrape-papers-puppeteer', {
+      // Use different endpoint for DeepMind
+      const endpoint = company === 'deepmind' 
+        ? '/api/scrape-deepmind'
+        : '/api/research/scrape-papers-puppeteer'
+      
+      const body = company === 'deepmind'
+        ? { type: 'papers', pages: 5 }
+        : { company }
+      
+      console.log(`📡 Making API call to ${endpoint} for ${company} papers...`)
+      const response = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ company })
+        body: JSON.stringify(body)
       })
       
       console.log(`📡 API response status: ${response.status}`)
@@ -215,10 +224,11 @@ export default function Research() {
         // Start polling for completion
         startPollingForCompletion()
         
-      } else if (data.success && data.count !== undefined) {
-        // This is a completed response (legacy sync mode)
+      } else if (data.success && (data.count !== undefined || data.data)) {
+        // This is a completed response (sync mode or DeepMind response)
+        const count = data.count || (data.data ? data.data.length : 0)
         console.log('✅ Paper scraping completed successfully, clearing state')
-        showToastMessage(`✅ Successfully scraped ${data.count} papers`)
+        showToastMessage(`✅ Successfully scraped ${count} ${company} papers`)
         setScraping(false)
         localStorage.removeItem('research-scraping-in-progress')
         console.log('🗑️ Removed research scraping state (completed)')
@@ -254,7 +264,7 @@ export default function Research() {
       
       try {
         // Fetch current papers count
-        const response = await fetch('/api/research/papers?limit=1')
+        const response = await fetch('/api/research/papers-simple?limit=1')
         const data = await response.json()
         const currentPaperCount = data.total || data.data?.length || 0
         
@@ -279,10 +289,11 @@ export default function Research() {
             console.log('🗑️ Polling cleared research scraping state')
             
             // Refresh the papers list
+            console.log('🔄 Refreshing papers list after scraping completion...')
             if (jobId) {
-              fetchRelatedPapers()
+              await fetchRelatedPapers()
             } else {
-              fetchAllPapers()
+              await fetchAllPapers()
             }
             
             showToastMessage('✅ Research scraping completed!')
@@ -298,10 +309,11 @@ export default function Research() {
           console.log('🗑️ Polling cleared research scraping state (timeout)')
           
           // Refresh the papers list
+          console.log('🔄 Refreshing papers list after timeout completion...')
           if (jobId) {
-            fetchRelatedPapers()
+            await fetchRelatedPapers()
           } else {
-            fetchAllPapers()
+            await fetchAllPapers()
           }
           
           showToastMessage('✅ Research scraping completed!')

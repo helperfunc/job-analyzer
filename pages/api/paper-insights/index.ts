@@ -54,7 +54,8 @@ export default async function handler(
         thought_type,
         rating,
         relevance_to_career,
-        implementation_difficulty
+        implementation_difficulty,
+        visibility
       } = req.body
 
       if (!paper_id || !insight) {
@@ -74,7 +75,8 @@ export default async function handler(
           thought_type: thought_type || 'general',
           rating,
           relevance_to_career,
-          implementation_difficulty
+          implementation_difficulty,
+          visibility: visibility || 'public'
         }])
         .select()
         .single()
