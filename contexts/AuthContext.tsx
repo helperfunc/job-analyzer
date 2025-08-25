@@ -55,7 +55,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(null)
       }
     } catch (error) {
-      console.error('Auth check error:', error)
+      if (process.env.NODE_ENV !== 'test') {
+        console.error('Auth check error:', error)
+      }
       setUser(null)
     } finally {
       setLoading(false)

@@ -43,11 +43,17 @@ export default function PaperInsights({ paperId, onShowToast }: PaperInsightsPro
     try {
       const response = await fetch(`/api/paper-insights?paper_id=${paperId}`)
       const data = await response.json()
-      if (data.success) {
+      if (data.success && Array.isArray(data.data)) {
         setInsights(data.data)
+      } else {
+        // Ensure insights is always an array
+        setInsights([])
       }
     } catch (error) {
-      console.error('Error fetching insights:', error)
+      if (process.env.NODE_ENV !== 'test') {
+        console.error('Error fetching insights:', error)
+      }
+      setInsights([]) // Ensure insights is reset on error
       onShowToast?.('❌ Failed to load insights')
     } finally {
       setLoading(false)
@@ -282,14 +288,14 @@ export default function PaperInsights({ paperId, onShowToast }: PaperInsightsPro
         <div className="flex justify-center py-8">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600"></div>
         </div>
-      ) : insights.length === 0 ? (
+      ) : !insights || insights.length === 0 ? (
         <div className="text-center py-8 text-gray-500">
           <div className="text-4xl mb-2">🧠</div>
           <p>No insights yet. Add your first insight!</p>
         </div>
       ) : (
         <div className="space-y-3">
-          {insights.map((insight) => (
+          {(insights || []).map((insight) => (
             <div key={insight.id} className="bg-white p-4 rounded-lg border hover:shadow-md transition-shadow">
               <div className="flex justify-between items-start mb-2">
                 <div className="flex items-center gap-2">

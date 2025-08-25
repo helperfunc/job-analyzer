@@ -41,7 +41,9 @@ const getInitialScrapingState = () => {
       console.log('🎯 No research scraping state found in localStorage')
     }
   } catch (error) {
-    console.error('Error checking initial research scraping state:', error)
+    if (process.env.NODE_ENV !== 'test') {
+      console.error('Error checking initial research scraping state:', error)
+    }
   }
   return false
 }
@@ -113,7 +115,9 @@ export default function Research() {
             console.log('🔍 Research scraping state expired or inactive')
           }
         } catch (error) {
-          console.error('Error in hydration research scraping check:', error)
+          if (process.env.NODE_ENV !== 'test') {
+            console.error('Error in hydration research scraping check:', error)
+          }
         }
       } else {
         console.log('🎯 No research scraping state found after hydration')
@@ -152,7 +156,9 @@ export default function Research() {
         setPapers([])
       }
     } catch (err) {
-      console.error('Failed to fetch papers:', err)
+      if (process.env.NODE_ENV !== 'test') {
+        console.error('Failed to fetch papers:', err)
+      }
       setError('Network error')
       setPapers([])
     } finally {
@@ -173,7 +179,9 @@ export default function Research() {
         setRelatedPapers([])
       }
     } catch (err) {
-      console.error('Failed to fetch related papers:', err)
+      if (process.env.NODE_ENV !== 'test') {
+        console.error('Failed to fetch related papers:', err)
+      }
       setRelatedPapers([])
     } finally {
       setLoading(false)
@@ -243,7 +251,9 @@ export default function Research() {
         throw new Error(data.error || 'Failed to scrape papers')
       }
     } catch (err) {
-      console.error('❌ Error scraping papers:', err)
+      if (process.env.NODE_ENV !== 'test') {
+        console.error('❌ Error scraping papers:', err)
+      }
       setError('Network error while scraping')
       showToastMessage('❌ Network error while scraping')
       setScraping(false)
@@ -328,7 +338,9 @@ export default function Research() {
           showToastMessage('⏰ Research scraping timeout - check manually')
         }
       } catch (pollError) {
-        console.error('❌ Research polling error:', pollError)
+        if (process.env.NODE_ENV !== 'test') {
+          console.error('❌ Research polling error:', pollError)
+        }
         // Don't stop polling for network errors, continue trying
       }
     }, 10000) // Poll every 10 seconds
@@ -355,7 +367,9 @@ export default function Research() {
         showToastMessage('❌ Failed to delete paper')
       }
     } catch (err) {
-      console.error('Error deleting paper:', err)
+      if (process.env.NODE_ENV !== 'test') {
+        console.error('Error deleting paper:', err)
+      }
       showToastMessage('❌ Network error while deleting')
     }
   }
@@ -378,7 +392,9 @@ export default function Research() {
         showToastMessage('❌ Failed to clear papers')
       }
     } catch (err) {
-      console.error('Error clearing papers:', err)
+      if (process.env.NODE_ENV !== 'test') {
+        console.error('Error clearing papers:', err)
+      }
       showToastMessage('❌ Network error while clearing')
     }
   }
@@ -415,7 +431,9 @@ export default function Research() {
         showToastMessage('❌ Failed to link paper to job')
       }
     } catch (err) {
-      console.error('Error linking paper to job:', err)
+      if (process.env.NODE_ENV !== 'test') {
+        console.error('Error linking paper to job:', err)
+      }
       showToastMessage('❌ Network error while linking')
     }
   }
@@ -443,7 +461,9 @@ export default function Research() {
         showToastMessage('❌ Failed to unlink paper from job')
       }
     } catch (err) {
-      console.error('Error unlinking paper from job:', err)
+      if (process.env.NODE_ENV !== 'test') {
+        console.error('Error unlinking paper from job:', err)
+      }
       showToastMessage('❌ Network error while unlinking')
     }
   }

@@ -169,7 +169,9 @@ export default function JobsPage() {
             })
           }
         } catch (err) {
-          console.error(`Failed to fetch ${company} jobs:`, err)
+          if (process.env.NODE_ENV !== 'test') {
+            console.error(`Failed to fetch ${company} jobs:`, err)
+          }
         }
       }
       
@@ -188,7 +190,9 @@ export default function JobsPage() {
       
       setJobs(allJobs)
     } catch (err) {
-      console.error('Failed to fetch jobs:', err)
+      if (process.env.NODE_ENV !== 'test') {
+        console.error('Failed to fetch jobs:', err)
+      }
       setError('Failed to fetch jobs')
     } finally {
       setLoading(false)
@@ -207,7 +211,9 @@ export default function JobsPage() {
         console.log(`Loaded ${data.data?.length || 0} papers`)
       }
     } catch (err) {
-      console.error('Failed to fetch papers:', err)
+      if (process.env.NODE_ENV !== 'test') {
+        console.error('Failed to fetch papers:', err)
+      }
     }
   }
 
@@ -221,7 +227,9 @@ export default function JobsPage() {
         setLinkedPapers([])
       }
     } catch (err) {
-      console.error('Failed to fetch linked papers:', err)
+      if (process.env.NODE_ENV !== 'test') {
+        console.error('Failed to fetch linked papers:', err)
+      }
       setLinkedPapers([])
     }
   }

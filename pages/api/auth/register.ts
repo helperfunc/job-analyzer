@@ -91,7 +91,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       .single()
 
     if (insertError) {
-      console.error('Error creating user:', insertError)
+      // Only log errors in non-test environments to reduce noise
+      if (process.env.NODE_ENV !== 'test') {
+        console.error('Error creating user:', insertError)
+      }
       
       // 提供更具体的错误信息
       if (insertError.message.includes('row-level security policy')) {

@@ -1194,7 +1194,8 @@ export default function JobDetail() {
                 <div className="grid gap-3">
                   {allJobResources.filter(resource => {
                     // Only show resources that are not already linked to this job
-                    return !resource.job_id || resource.job_id !== (job?.id || jobId)
+                    const isLinked = jobResources.some(jr => jr.id === resource.id)
+                    return !isLinked
                   }).map(resource => (
                     <div
                       key={resource.id}
@@ -1247,7 +1248,7 @@ export default function JobDetail() {
                       </div>
                     </div>
                   ))}
-                  {allJobResources.filter(resource => !resource.job_id || resource.job_id !== (job?.id || jobId)).length === 0 && (
+                  {allJobResources.filter(resource => !jobResources.some(jr => jr.id === resource.id)).length === 0 && (
                     <div className="text-center py-8 text-gray-500">
                       <p className="mb-2">No resources available to link.</p>
                       <p className="text-sm">Create resources in the Jobs page first.</p>
@@ -1259,7 +1260,7 @@ export default function JobDetail() {
               {/* Footer */}
               <div className="mt-4 pt-4 border-t flex justify-between items-center">
                 <div className="text-sm text-gray-600">
-                  {allJobResources.filter(resource => !resource.job_id || resource.job_id !== (job?.id || jobId)).length} available resources
+                  {allJobResources.filter(resource => !jobResources.some(jr => jr.id === resource.id)).length} available resources
                 </div>
                 <button
                   onClick={() => setShowLinkResourceModal(false)}

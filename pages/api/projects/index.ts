@@ -4,16 +4,6 @@ import jwt from 'jsonwebtoken'
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key'
 
-// Use global variable to share data between endpoints
-declare global {
-  var demoProjects: any[]
-}
-
-// Initialize if not exists
-if (!global.demoProjects) {
-  global.demoProjects = []
-}
-
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   // Get token from cookie or Authorization header
   let token = req.cookies.token
@@ -39,8 +29,23 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   if (req.method === 'GET') {
     try {
-      // For demo mode, return all projects (filter by user in production)
-      const filteredProjects = global.demoProjects.map(p => ({
+      if (!supabase) {
+        return res.status(503).json({
+          success: false,
+          error: 'Database not configured'
+        })
+      }
+
+      // Fetch projects from database
+      const { data: projects, error } = await supabase
+        .from('projects')
+        .select('*')
+        .order('created_at', { ascending: false })
+
+      if (error) throw error
+
+      // Add permissions for each project
+      const projectsWithPermissions = (projects || []).map(p => ({
         ...p,
         canEdit: p.user_id === userId,
         canDelete: p.user_id === userId
@@ -48,7 +53,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
       return res.status(200).json({
         success: true,
-        data: filteredProjects
+        data: projectsWithPermissions
       })
 
     } catch (error) {
@@ -80,28 +85,36 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         })
       }
 
-      const newProject = {
-        id: `project-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-        title,
-        description: description || '',
-        status: status || 'planning',
-        priority: priority || 'medium',
-        category: category || 'job_search',
-        target_date: target_date || null,
-        progress: progress || 0,
-        tags: tags || [],
-        linked_jobs: [],
-        linked_papers: [],
-        linked_resources: [],
-        notes: notes || '',
-        is_public: is_public || false,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        user_id: userId,
-        username
+      if (!supabase) {
+        return res.status(503).json({
+          success: false,
+          error: 'Database not configured'
+        })
       }
 
-      global.demoProjects.push(newProject)
+      // Insert into database
+      const { data: newProject, error } = await supabase
+        .from('projects')
+        .insert([{
+          title,
+          description: description || '',
+          status: status || 'planning',
+          priority: priority || 'medium',
+          category: category || 'job_search',
+          target_date: target_date || null,
+          progress: progress || 0,
+          tags: tags || [],
+          linked_jobs: [],
+          linked_papers: [],
+          linked_resources: [],
+          notes: notes || '',
+          is_public: is_public || false,
+          user_id: userId
+        }])
+        .select()
+        .single()
+
+      if (error) throw error
 
       return res.status(201).json({
         success: true,

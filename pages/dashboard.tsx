@@ -97,7 +97,9 @@ export default function Dashboard() {
         setComments([])
       }
     } catch (error) {
-      console.error('Error fetching user data:', error)
+      if (process.env.NODE_ENV !== 'test') {
+        console.error('Error fetching user data:', error)
+      }
     } finally {
       setLoadingData(false)
     }

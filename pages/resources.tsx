@@ -84,7 +84,9 @@ export default function ResourcesPage() {
 
       setResources(allResources)
     } catch (error) {
-      console.error('Error fetching resources:', error)
+      if (process.env.NODE_ENV !== 'test') {
+        console.error('Error fetching resources:', error)
+      }
     } finally {
       setLoading(false)
     }
@@ -98,7 +100,9 @@ export default function ResourcesPage() {
         setJobs(data.data)
       }
     } catch (error) {
-      console.error('Error fetching jobs:', error)
+      if (process.env.NODE_ENV !== 'test') {
+        console.error('Error fetching jobs:', error)
+      }
     }
   }
 
@@ -142,7 +146,9 @@ export default function ResourcesPage() {
         alert('Failed to create resource: ' + (data.error || 'Unknown error'))
       }
     } catch (error) {
-      console.error('Error creating resource:', error)
+      if (process.env.NODE_ENV !== 'test') {
+        console.error('Error creating resource:', error)
+      }
       alert('Network error while creating resource')
     }
   }
@@ -163,7 +169,9 @@ export default function ResourcesPage() {
         alert('Failed to delete resource')
       }
     } catch (error) {
-      console.error('Error deleting resource:', error)
+      if (process.env.NODE_ENV !== 'test') {
+        console.error('Error deleting resource:', error)
+      }
       alert('Network error while deleting resource')
     }
   }

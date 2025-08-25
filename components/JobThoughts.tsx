@@ -40,11 +40,17 @@ export default function JobThoughts({ jobId, onShowToast }: JobThoughtsProps) {
     try {
       const response = await fetch(`/api/job-thoughts?job_id=${jobId}`)
       const data = await response.json()
-      if (data.success) {
+      if (data.success && Array.isArray(data.data)) {
         setThoughts(data.data)
+      } else {
+        // Ensure thoughts is always an array
+        setThoughts([])
       }
     } catch (error) {
-      console.error('Error fetching thoughts:', error)
+      if (process.env.NODE_ENV !== 'test') {
+        console.error('Error fetching thoughts:', error)
+      }
+      setThoughts([]) // Ensure thoughts is reset on error
       onShowToast?.('❌ Failed to load thoughts')
     } finally {
       setLoading(false)
@@ -284,14 +290,14 @@ export default function JobThoughts({ jobId, onShowToast }: JobThoughtsProps) {
         <div className="flex justify-center py-8">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
         </div>
-      ) : thoughts.length === 0 ? (
+      ) : !thoughts || thoughts.length === 0 ? (
         <div className="text-center py-8 text-gray-500">
           <div className="text-4xl mb-2">📝</div>
           <p>No thoughts yet. Add your first thought!</p>
         </div>
       ) : (
         <div className="space-y-3">
-          {thoughts.map((thought) => (
+          {(thoughts || []).map((thought) => (
             <div key={thought.id} className="bg-white p-4 rounded-lg border hover:shadow-md transition-shadow">
               <div className="flex justify-between items-start mb-2">
                 <div className="flex items-center gap-2">

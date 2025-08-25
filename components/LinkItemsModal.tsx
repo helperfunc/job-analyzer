@@ -65,9 +65,9 @@ export default function LinkItemsModal({
         resourcesRes.json()
       ])
 
-      if (jobsData.success) setJobs(jobsData.data)
-      if (papersData.success) setPapers(papersData.data)
-      if (resourcesData.success) setResources(resourcesData.data)
+      if (jobsData.success && jobsData.jobs) setJobs(jobsData.jobs)
+      if (papersData.success && papersData.data) setPapers(papersData.data)
+      if (resourcesData.success && resourcesData.data) setResources(resourcesData.data)
     } catch (error) {
       console.error('Error fetching data:', error)
     } finally {
@@ -103,17 +103,17 @@ export default function LinkItemsModal({
     )
   }
 
-  const filteredJobs = jobs.filter(job => 
+  const filteredJobs = (jobs || []).filter(job => 
     job.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
     job.company.toLowerCase().includes(searchTerm.toLowerCase())
   )
 
-  const filteredPapers = papers.filter(paper => 
+  const filteredPapers = (papers || []).filter(paper => 
     paper.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
     paper.company.toLowerCase().includes(searchTerm.toLowerCase())
   )
 
-  const filteredResources = resources.filter(resource => 
+  const filteredResources = (resources || []).filter(resource => 
     resource.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
     resource.resource_type.toLowerCase().includes(searchTerm.toLowerCase())
   )

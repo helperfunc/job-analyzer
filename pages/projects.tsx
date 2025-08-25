@@ -113,9 +113,9 @@ export default function ProjectsPage() {
         resourcesRes.json()
       ])
 
-      if (jobsData.success) setJobs(jobsData.data.slice(0, 50))
-      if (papersData.success) setPapers(papersData.data.slice(0, 50))
-      if (resourcesData.success) setResources(resourcesData.data.slice(0, 50))
+      if (jobsData.success && jobsData.jobs) setJobs(jobsData.jobs.slice(0, 50))
+      if (papersData.success && papersData.data) setPapers(papersData.data.slice(0, 50))
+      if (resourcesData.success && resourcesData.data) setResources(resourcesData.data.slice(0, 50))
     } catch (error) {
       console.error('Error fetching linked data:', error)
     }
