@@ -1,28 +1,19 @@
 import { NextApiRequest, NextApiResponse } from 'next'
-import { createClient } from '@supabase/supabase-js'
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-
-if (!supabaseUrl || !supabaseKey) {
-  throw new Error('Missing Supabase environment variables')
-}
-
-const supabase = createClient(supabaseUrl, supabaseKey)
+import { supabase } from '../../../lib/supabase'
+import { getCurrentUser } from '../../../lib/auth'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method === 'GET') {
     try {
-      const { user_id, job_id } = req.query
+      const { job_id } = req.query
+      const user = await getCurrentUser(req)
+      const userId = user ? user.userId : 'default'
 
       let query = supabase
         .from('job_resources')
         .select('*')
+        .eq('user_id', userId)
         .order('created_at', { ascending: false })
-
-      if (user_id) {
-        query = query.eq('user_id', user_id)
-      }
 
       // Note: job_id filtering removed as we now use resource-job-relations table
 
@@ -50,19 +41,21 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
   } else if (req.method === 'POST') {
     try {
-      const { user_id, job_id, title, url, resource_type, description } = req.body
+      const user = await getCurrentUser(req)
+      const userId = user ? user.userId : 'default'
+      const { job_id, title, url, resource_type, description } = req.body
 
-      if (!user_id || !title || !resource_type) {
+      if (!title || !resource_type) {
         return res.status(400).json({
           success: false,
-          error: 'Missing required fields: user_id, title, resource_type'
+          error: 'Missing required fields: title, resource_type'
         })
       }
 
       const { data, error } = await supabase
         .from('job_resources')
         .insert([{
-          user_id,
+          user_id: userId,
           job_id: job_id || null,
           title,
           url: url || null,

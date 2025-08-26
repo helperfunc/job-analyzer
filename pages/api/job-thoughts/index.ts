@@ -1,6 +1,7 @@
 import { NextApiRequest, NextApiResponse } from 'next'
 import { supabase } from '../../../lib/supabase'
 import { getCurrentUser } from '../../../lib/auth'
+import { getUserUUID } from '../../../lib/auth-helpers'
 
 export default async function handler(
   req: NextApiRequest,
@@ -54,7 +55,8 @@ export default async function handler(
 
       // Get current user - if not logged in, use 'default'
       const user = await getCurrentUser(req)
-      const userId = user ? user.userId : 'default'
+      const textUserId = user ? user.userId : 'default'
+      const userId = await getUserUUID(textUserId)
 
       // First check if the job exists
       const { data: job } = await supabase

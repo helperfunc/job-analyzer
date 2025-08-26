@@ -32,7 +32,7 @@ export default function ResourcesPage() {
   const [jobs, setJobs] = useState<Job[]>([])
   const [loading, setLoading] = useState(true)
   const [showAddModal, setShowAddModal] = useState(false)
-  const [selectedResourceType, setSelectedResourceType] = useState<'job_resources' | 'interview_resources'>('job_resources')
+  const [selectedResourceType, setSelectedResourceType] = useState<'user_resources' | 'job_resources' | 'interview_resources'>('user_resources')
   const [selectedJob, setSelectedJob] = useState('')
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedType, setSelectedType] = useState('')
@@ -63,23 +63,31 @@ export default function ResourcesPage() {
   useEffect(() => {
     fetchResources()
     fetchJobs()
-  }, [])
+    
+    // Check if we should show the add modal from URL query
+    if (router.query.create === 'true') {
+      setShowAddModal(true)
+    }
+  }, [router.query])
 
   const fetchResources = async () => {
     try {
-      const [jobResourcesRes, interviewResourcesRes] = await Promise.all([
-        fetch('/api/job-resources'),
-        fetch('/api/interview-resources')
+      const [jobResourcesRes, interviewResourcesRes, userResourcesRes] = await Promise.all([
+        fetch('/api/job-resources', { credentials: 'include' }),
+        fetch('/api/interview-resources', { credentials: 'include' }),
+        fetch('/api/user/user-resources', { credentials: 'include' })
       ])
 
-      const [jobResourcesData, interviewResourcesData] = await Promise.all([
+      const [jobResourcesData, interviewResourcesData, userResourcesData] = await Promise.all([
         jobResourcesRes.json(),
-        interviewResourcesRes.json()
+        interviewResourcesRes.json(),
+        userResourcesRes.json()
       ])
 
       const allResources = [
         ...(jobResourcesData.success && jobResourcesData.data ? jobResourcesData.data.map((r: any) => ({ ...r, source: 'job_resources' })) : []),
-        ...(interviewResourcesData.success && interviewResourcesData.data ? interviewResourcesData.data.map((r: any) => ({ ...r, source: 'interview_resources' })) : [])
+        ...(interviewResourcesData.success && interviewResourcesData.data ? interviewResourcesData.data.map((r: any) => ({ ...r, source: 'interview_resources' })) : []),
+        ...(userResourcesData.success && userResourcesData.resources ? userResourcesData.resources.map((r: any) => ({ ...r, source: 'user_resources' })) : [])
       ]
 
       setResources(allResources)
@@ -94,7 +102,7 @@ export default function ResourcesPage() {
 
   const fetchJobs = async () => {
     try {
-      const response = await fetch('/api/jobs')
+      const response = await fetch('/api/jobs', { credentials: 'include' })
       const data = await response.json()
       if (data.success && data.data) {
         setJobs(data.data)
@@ -110,29 +118,44 @@ export default function ResourcesPage() {
     if (!newResource.title.trim() || !newResource.content.trim()) return
 
     try {
-      const endpoint = selectedResourceType === 'job_resources' ? '/api/job-resources' : '/api/interview-resources'
+      let endpoint = ''
+      let bodyData: any = {}
       
-      const bodyData = selectedResourceType === 'job_resources' 
-        ? {
-            user_id: 'default',
-            job_id: newResource.job_id || null,
-            title: newResource.title,
-            url: newResource.url || null,
-            resource_type: newResource.resource_type,
-            description: newResource.content
-          }
-        : {
-            job_id: newResource.job_id || null,
-            title: newResource.title,
-            url: newResource.url || null,
-            resource_type: newResource.resource_type,
-            content: newResource.content,
-            tags: newResource.tags
-          }
+      if (selectedResourceType === 'user_resources') {
+        endpoint = '/api/user/user-resources'
+        bodyData = {
+          title: newResource.title,
+          description: newResource.content,
+          url: newResource.url || null,
+          resource_type: newResource.resource_type,
+          visibility: 'public',
+          tags: newResource.tags
+        }
+      } else if (selectedResourceType === 'job_resources') {
+        endpoint = '/api/job-resources'
+        bodyData = {
+          job_id: newResource.job_id || null,
+          title: newResource.title,
+          url: newResource.url || null,
+          resource_type: newResource.resource_type,
+          description: newResource.content
+        }
+      } else {
+        endpoint = '/api/interview-resources'
+        bodyData = {
+          job_id: newResource.job_id || null,
+          title: newResource.title,
+          url: newResource.url || null,
+          resource_type: newResource.resource_type,
+          content: newResource.content,
+          tags: newResource.tags
+        }
+      }
       
       const response = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify(bodyData)
       })
 
@@ -157,10 +180,18 @@ export default function ResourcesPage() {
     if (!confirm('Are you sure you want to delete this resource?')) return
 
     try {
-      const endpoint = source === 'job_resources' ? '/api/job-resources' : '/api/interview-resources'
+      let endpoint = ''
+      if (source === 'user_resources') {
+        endpoint = `/api/user/user-resources?resource_id=${resourceId}`
+      } else if (source === 'job_resources') {
+        endpoint = `/api/job-resources?id=${resourceId}`
+      } else {
+        endpoint = `/api/interview-resources?id=${resourceId}`
+      }
       
-      const response = await fetch(`${endpoint}?id=${resourceId}`, {
-        method: 'DELETE'
+      const response = await fetch(endpoint, {
+        method: 'DELETE',
+        credentials: 'include'
       })
 
       if (response.ok) {
@@ -398,6 +429,16 @@ export default function ResourcesPage() {
                     <label className="flex items-center">
                       <input
                         type="radio"
+                        value="user_resources"
+                        checked={selectedResourceType === 'user_resources'}
+                        onChange={(e) => setSelectedResourceType(e.target.value as any)}
+                        className="mr-2"
+                      />
+                      📚 General Resource
+                    </label>
+                    <label className="flex items-center">
+                      <input
+                        type="radio"
                         value="job_resources"
                         checked={selectedResourceType === 'job_resources'}
                         onChange={(e) => setSelectedResourceType(e.target.value as any)}
@@ -450,24 +491,26 @@ export default function ResourcesPage() {
                   </select>
                 </div>
 
-                {/* Job Selection */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Link to Job (Optional)
-                  </label>
-                  <select
-                    value={newResource.job_id}
-                    onChange={(e) => setNewResource({...newResource, job_id: e.target.value})}
-                    className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="">No specific job</option>
-                    {jobs && jobs.map(job => (
-                      <option key={job.id} value={job.id}>
-                        {job.title} - {job.company}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                {/* Job Selection - only show for job/interview resources */}
+                {selectedResourceType !== 'user_resources' && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Link to Job (Optional)
+                    </label>
+                    <select
+                      value={newResource.job_id}
+                      onChange={(e) => setNewResource({...newResource, job_id: e.target.value})}
+                      className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="">No specific job</option>
+                      {jobs && jobs.map(job => (
+                        <option key={job.id} value={job.id}>
+                          {job.title} - {job.company}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
 
                 {/* URL */}
                 <div>

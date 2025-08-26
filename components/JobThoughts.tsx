@@ -38,7 +38,9 @@ export default function JobThoughts({ jobId, onShowToast }: JobThoughtsProps) {
   const fetchThoughts = async () => {
     setLoading(true)
     try {
-      const response = await fetch(`/api/job-thoughts?job_id=${jobId}`)
+      const response = await fetch(`/api/job-thoughts?job_id=${jobId}`, {
+        credentials: 'include'
+      })
       const data = await response.json()
       if (data.success && Array.isArray(data.data)) {
         setThoughts(data.data)
@@ -184,6 +186,7 @@ export default function JobThoughts({ jobId, onShowToast }: JobThoughtsProps) {
             const response = await fetch('/api/job-thoughts', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
+              credentials: 'include',
               body: JSON.stringify(extendedData)
             })
 

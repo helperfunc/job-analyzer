@@ -18,7 +18,7 @@ export default function Dashboard() {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState<'overview' | 'bookmarks' | 'resources' | 'activity'>('overview')
+  const [activeTab, setActiveTab] = useState<'overview' | 'bookmarks' | 'resources' | 'activity' | 'friends'>('overview')
   const [searchQuery, setSearchQuery] = useState('')
   const [bookmarks, setBookmarks] = useState<any[]>([])
   const [resources, setResources] = useState<any[]>([])
@@ -93,8 +93,15 @@ export default function Dashboard() {
         }
       } else if (activeTab === 'activity') {
         // Fetch comments/thoughts/insights
-        // TODO: Implement when API is available
-        setComments([])
+        const response = await fetch('/api/user/activity', {
+          credentials: 'include'
+        })
+        const data = await response.json()
+        console.log('Activity API response:', data)
+        if (data.success) {
+          setComments(data.activities || [])
+          console.log('Activities set:', data.activities)
+        }
       }
     } catch (error) {
       if (process.env.NODE_ENV !== 'test') {
@@ -184,7 +191,8 @@ export default function Dashboard() {
               { key: 'overview', label: 'Overview' },
               { key: 'bookmarks', label: `Bookmarks (${user.stats.bookmarks})` },
               { key: 'resources', label: `My Resources (${user.stats.resources})` },
-              { key: 'activity', label: `Comments (${user.stats.comments})` }
+              { key: 'activity', label: `Comments (${user.stats.comments})` },
+              { key: 'friends', label: 'Friends' }
             ].map((tab) => (
               <button
                 key={tab.key}
@@ -482,17 +490,21 @@ export default function Dashboard() {
                           )}
                         </div>
                         <div className="flex items-center gap-2">
+                          {resource.url && (
+                            <a
+                              href={resource.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-blue-600 hover:text-blue-800 text-sm"
+                            >
+                              View Resource
+                            </a>
+                          )}
                           <button
-                            onClick={() => router.push(`/resources/${resource.id}`)}
-                            className="text-blue-600 hover:text-blue-800 text-sm"
-                          >
-                            View
-                          </button>
-                          <button
-                            onClick={() => router.push(`/resources/${resource.id}/edit`)}
+                            onClick={() => router.push('/resources')}
                             className="text-green-600 hover:text-green-800 text-sm"
                           >
-                            Edit
+                            Manage
                           </button>
                         </div>
                       </div>
@@ -506,7 +518,7 @@ export default function Dashboard() {
         {activeTab === 'activity' && (
           <div className="bg-white rounded-lg shadow p-6">
             <div className="flex justify-between items-center mb-6">
-              <h2 className="text-xl font-semibold">Your Activity</h2>
+              <h2 className="text-xl font-semibold">Your Activity ({comments.length})</h2>
               <button
                 onClick={fetchUserData}
                 disabled={loadingData}
@@ -516,11 +528,145 @@ export default function Dashboard() {
               </button>
             </div>
             
-            <div className="text-center py-8">
-              <p className="text-gray-500 mb-4">Comments and thoughts feature coming soon!</p>
-              <p className="text-sm text-gray-400">
-                This will include your thoughts, insights, and comments across the platform.
+            {loadingData ? (
+              <div className="flex justify-center items-center py-8">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600"></div>
+              </div>
+            ) : comments.length === 0 ? (
+              <div className="text-center py-8">
+                <p className="text-gray-500 mb-4">No activity yet</p>
+                <p className="text-sm text-gray-400">
+                  Start by adding thoughts on jobs or insights on papers!
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {comments
+                  .filter(activity => 
+                    searchQuery === '' || 
+                    activity.content.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                    activity.target.title.toLowerCase().includes(searchQuery.toLowerCase())
+                  )
+                  .map((activity) => (
+                    <div key={activity.id} className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50">
+                      <div className="flex justify-between items-start">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-2">
+                            <span className={`px-2 py-1 text-xs rounded-full ${
+                              activity.type === 'job_thought' ? 'bg-blue-100 text-blue-800' :
+                              activity.type === 'paper_insight' ? 'bg-green-100 text-green-800' :
+                              'bg-purple-100 text-purple-800'
+                            }`}>
+                              {activity.type.replace('_', ' ')}
+                            </span>
+                            {activity.rating && (
+                              <span className="text-xs text-yellow-600">
+                                {'★'.repeat(activity.rating)}{'☆'.repeat(5-activity.rating)}
+                              </span>
+                            )}
+                            <span className="text-xs text-gray-500">
+                              {new Date(activity.created_at).toLocaleDateString()}
+                            </span>
+                          </div>
+                          <p className="text-gray-900 mb-2">{activity.content}</p>
+                          <div className="text-sm text-gray-600">
+                            <span className="font-medium">On:</span> {activity.target.title}
+                            {activity.target.company && (
+                              <span className="ml-2 text-gray-500">• {activity.target.company}</span>
+                            )}
+                          </div>
+                        </div>
+                        <a
+                          href={(() => {
+                            if (activity.target.type === 'job') {
+                              return `/job/${activity.target.id}`
+                            } else if (activity.target.type === 'paper') {
+                              return `/research#${activity.target.id}`
+                            } else {
+                              return `/resources#${activity.target.id}`
+                            }
+                          })()}
+                          className="text-blue-600 hover:text-blue-800 text-sm"
+                        >
+                          View
+                        </a>
+                      </div>
+                    </div>
+                  ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === 'friends' && (
+          <div className="bg-white rounded-lg shadow p-6">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-xl font-semibold">Friends & Community</h2>
+              <button
+                onClick={() => router.push('/community')}
+                className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700"
+              >
+                Explore Community
+              </button>
+            </div>
+            
+            <div className="mb-8">
+              <h3 className="text-lg font-medium mb-4">About Our Community</h3>
+              <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+                <p className="text-purple-900 mb-2">
+                  🌈 Welcome to our inclusive tech community! We're building a supportive space for everyone, 
+                  with a special focus on creating opportunities for underrepresented groups in tech.
+                </p>
+                <p className="text-purple-800 text-sm">
+                  Join our LeetCode study groups, system design sessions, and career support circles. 
+                  Together, we grow stronger! 💪
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="border border-gray-200 rounded-lg p-4">
+                <h4 className="font-medium text-gray-900 mb-3">Study Groups</h4>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm">🧮 LeetCode Practice Group</span>
+                    <span className="text-xs text-green-600">Active</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm">🏗️ System Design Study</span>
+                    <span className="text-xs text-green-600">Active</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm">🎯 Interview Prep Circle</span>
+                    <span className="text-xs text-yellow-600">Starting Soon</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="border border-gray-200 rounded-lg p-4">
+                <h4 className="font-medium text-gray-900 mb-3">Community Features</h4>
+                <div className="space-y-2 text-sm text-gray-600">
+                  <p>• Share resources with visibility controls</p>
+                  <p>• Connect with like-minded job seekers</p>
+                  <p>• Private spaces for community members</p>
+                  <p>• Peer support and mentorship</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-6 text-center">
+              <p className="text-gray-500 mb-4">
+                Friends feature is coming soon! You'll be able to connect with other members, 
+                share private resources, and build your support network.
               </p>
+              <div className="flex justify-center gap-4">
+                <button
+                  onClick={() => router.push('/resources?visibility=friends')}
+                  className="text-purple-600 hover:text-purple-800 text-sm font-medium"
+                >
+                  View Friends-Only Resources →
+                </button>
+              </div>
             </div>
           </div>
         )}

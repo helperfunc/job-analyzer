@@ -1,24 +1,22 @@
 import { NextApiRequest, NextApiResponse } from 'next'
-import { createClient } from '@supabase/supabase-js'
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-
-if (!supabaseUrl || !supabaseKey) {
-  throw new Error('Missing Supabase environment variables')
-}
-
-const supabase = createClient(supabaseUrl, supabaseKey)
+import { supabase } from '../../../lib/supabase'
+import { getCurrentUser } from '../../../lib/auth'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method === 'GET') {
     try {
       const { job_id } = req.query
+      const user = await getCurrentUser(req)
+      const userId = user ? user.userId : 'default'
 
+      // Temporarily handle case where user_id column might not exist yet
       let query = supabase
         .from('interview_resources')
         .select('*')
         .order('created_at', { ascending: false })
+      
+      // Only filter by user_id if the column exists (comment out temporarily)
+      // .eq('user_id', userId)
 
       // Note: job_id filtering removed as we now use resource-job-relations table
 
@@ -46,6 +44,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
   } else if (req.method === 'POST') {
     try {
+      const user = await getCurrentUser(req)
+      const userId = user ? user.userId : 'default'
       const { job_id, title, url, resource_type, content, tags } = req.body
 
       if (!job_id || !title || !resource_type || !content) {
@@ -55,16 +55,22 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         })
       }
 
+      // Temporarily handle case where user_id column might not exist yet
+      const insertData: any = {
+        job_id,
+        title,
+        url: url || null,
+        resource_type,
+        content,
+        tags: tags || []
+      }
+      
+      // Only include user_id if column exists (comment out temporarily)
+      // insertData.user_id = userId
+      
       const { data, error } = await supabase
         .from('interview_resources')
-        .insert([{
-          job_id,
-          title,
-          url: url || null,
-          resource_type,
-          content,
-          tags: tags || []
-        }])
+        .insert([insertData])
         .select()
 
       if (error) {
