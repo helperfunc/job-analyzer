@@ -121,7 +121,7 @@ async function getComments(req: AuthenticatedRequest, res: NextApiResponse) {
     // 获取评论的回复（如果请求的是顶级评论）
     if (parent_only === 'true' && comments) {
       for (const comment of comments) {
-        const { data: replies } = await supabase
+        const repliesResult = await supabase
           .from('comments')
           .select(`
             id,
@@ -140,9 +140,9 @@ async function getComments(req: AuthenticatedRequest, res: NextApiResponse) {
           `)
           .eq('parent_comment_id', comment.id)
           .eq('is_deleted', false)
-          .order('created_at', { ascending: true })
+          .order('created_at', { ascending: true });
 
-        (comment as any).replies = replies || []
+        (comment as any).replies = repliesResult.data || []
       }
     }
 
@@ -167,6 +167,16 @@ async function createComment(
   userId: string
 ) {
   try {
+    // Check if database is available
+    if (!isSupabaseAvailable()) {
+      return res.status(500).json({
+        error: 'Database not available',
+        details: 'Database connection is not configured'
+      })
+    }
+
+    const supabase = getSupabase()
+    
     const commentData: CommentRequest = req.body
 
     if (!commentData.target_type || !commentData.content) {

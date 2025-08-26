@@ -5,6 +5,16 @@ import { getCurrentUser } from '../../../lib/auth'
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method === 'GET') {
     try {
+      // Check if database is available
+      if (!isSupabaseAvailable()) {
+        return res.status(500).json({
+          error: 'Database not available',
+          details: 'Database connection is not configured'
+        })
+      }
+
+      const supabase = getSupabase()
+      
       const { job_id } = req.query
       const user = await getCurrentUser(req)
       const userId = user ? user.userId : 'default'
@@ -105,6 +115,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
   } else if (req.method === 'PUT') {
     try {
+      // Check if database is available
+      if (!isSupabaseAvailable()) {
+        return res.status(500).json({
+          error: 'Database not available',
+          details: 'Database connection is not configured'
+        })
+      }
+
+      const supabase = getSupabase()
+      
       const { id } = req.query
       const { job_id, title, url, resource_type, content, tags } = req.body
 
@@ -152,6 +172,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
   } else if (req.method === 'DELETE') {
     try {
+      // Check if database is available
+      if (!isSupabaseAvailable()) {
+        return res.status(500).json({
+          error: 'Database not available',
+          details: 'Database connection is not configured'
+        })
+      }
+
+      const supabase = getSupabase()
+      
       const { id } = req.query
 
       if (!id || typeof id !== 'string') {
