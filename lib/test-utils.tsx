@@ -1,6 +1,8 @@
-import React, { ReactElement } from 'react'
+import React, { ReactElement, createContext } from 'react'
 import { render, RenderOptions } from '@testing-library/react'
-import { AuthProvider } from '../contexts/AuthContext'
+
+// Create a mock AuthContext
+const AuthContext = createContext<any>(undefined)
 
 // Mock AuthContext for testing
 const MockAuthProvider = ({ children }: { children: React.ReactNode }) => {
@@ -9,15 +11,18 @@ const MockAuthProvider = ({ children }: { children: React.ReactNode }) => {
     login: jest.fn(),
     logout: jest.fn(),
     register: jest.fn(),
+    loginWithGoogle: jest.fn(),
+    checkAuth: jest.fn(),
     loading: false,
+    isAuthenticated: false,
     error: null,
     clearError: jest.fn()
   }
 
   return (
-    <AuthProvider value={mockAuthValue}>
+    <AuthContext.Provider value={mockAuthValue}>
       {children}
-    </AuthProvider>
+    </AuthContext.Provider>
   )
 }
 
