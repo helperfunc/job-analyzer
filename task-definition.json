@@ -28,38 +28,31 @@
       "secrets": [
         {
           "name": "DATABASE_URL",
-          "valueFrom": "arn:aws:secretsmanager:${AWS_REGION}:${AWS_ACCOUNT_ID}:secret:job-analyzer/database-url"
+          "valueFrom": "arn:aws:secretsmanager:us-east-1:076181803263:secret:job-analyzer/database-url"
         },
         {
           "name": "JWT_SECRET",
-          "valueFrom": "arn:aws:secretsmanager:${AWS_REGION}:${AWS_ACCOUNT_ID}:secret:job-analyzer/jwt-secret"
+          "valueFrom": "arn:aws:secretsmanager:us-east-1:076181803263:secret:job-analyzer/jwt-secret"
         },
         {
           "name": "GOOGLE_CLIENT_ID",
-          "valueFrom": "arn:aws:secretsmanager:${AWS_REGION}:${AWS_ACCOUNT_ID}:secret:job-analyzer/google-client-id"
+          "valueFrom": "arn:aws:secretsmanager:us-east-1:076181803263:secret:job-analyzer/google-client-id"
         },
         {
           "name": "GOOGLE_CLIENT_SECRET",
-          "valueFrom": "arn:aws:secretsmanager:${AWS_REGION}:${AWS_ACCOUNT_ID}:secret:job-analyzer/google-client-secret"
+          "valueFrom": "arn:aws:secretsmanager:us-east-1:076181803263:secret:job-analyzer/google-client-secret"
         }
       ],
       "logConfiguration": {
         "logDriver": "awslogs",
         "options": {
           "awslogs-group": "/ecs/job-analyzer",
-          "awslogs-region": "${AWS_REGION}",
+          "awslogs-region": "us-east-1",
           "awslogs-stream-prefix": "ecs"
         }
-      },
-      "healthCheck": {
-        "command": ["CMD-SHELL", "curl -f http://localhost:3000/api/health || exit 1"],
-        "interval": 30,
-        "timeout": 5,
-        "retries": 3,
-        "startPeriod": 60
       }
     }
   ],
-  "executionRoleArn": "arn:aws:iam::${AWS_ACCOUNT_ID}:role/ecsTaskExecutionRole",
-  "taskRoleArn": "arn:aws:iam::${AWS_ACCOUNT_ID}:role/ecsTaskRole"
+  "executionRoleArn": "arn:aws:iam::076181803263:role/ecsTaskExecutionRole",
+  "taskRoleArn": "arn:aws:iam::076181803263:role/ecsTaskRole"
 }
