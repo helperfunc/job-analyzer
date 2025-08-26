@@ -32,7 +32,7 @@ export default async function handler(
       })
     }
 
-    if (!supabase) {
+    if (!isSupabaseAvailable()) {
       return res.status(503).json({
         success: false,
         error: 'Database not configured'

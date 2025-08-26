@@ -50,7 +50,7 @@ export default async function handler(
     }
 
     // If database is not configured, return mock analysis
-    if (!supabase) {
+    if (!isSupabaseAvailable()) {
       const mockResult = {
         ...mockGapAnalysis,
         job_id,

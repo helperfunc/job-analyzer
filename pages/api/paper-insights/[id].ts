@@ -5,7 +5,7 @@ export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
-  if (!supabase) {
+  if (!isSupabaseAvailable()) {
     return res.status(503).json({
       success: false,
       error: 'Database not configured'
@@ -75,6 +75,7 @@ export default async function handler(
     }
   } else if (req.method === 'DELETE') {
     try {
+      const supabase = getSupabase()
       const { error } = await supabase
         .from('paper_insights')
         .delete()

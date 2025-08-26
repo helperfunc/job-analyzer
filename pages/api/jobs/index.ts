@@ -25,7 +25,7 @@ export default optionalAuth(async function handler(
     const supabase = getSupabase()
     
     // Check if Supabase is configured
-    if (!supabase) {
+    if (!isSupabaseAvailable()) {
       // Return mock data if no database
       return res.status(200).json({
         success: true,

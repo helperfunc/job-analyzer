@@ -26,7 +26,7 @@ export default async function handler(
     const supabase = getSupabase()
     
     // Check if Supabase is configured
-    if (!supabase) {
+    if (!isSupabaseAvailable()) {
       return res.status(503).json({
         success: false,
         error: 'Database not configured'

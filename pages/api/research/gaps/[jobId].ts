@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next'
-import { supabase } from '../../../../lib/supabase'
+import { getSupabase, isSupabaseAvailable } from '../../../lib/supabase'
 
 // Empty mock data fallback
 const mockGapAnalysis = {
@@ -38,7 +38,7 @@ export default async function handler(
       }
 
       // If database is not configured, return mock data
-      if (!supabase) {
+      if (!isSupabaseAvailable()) {
         if (jobId === mockGapAnalysis.job_id && user_id === mockGapAnalysis.user_id) {
           return res.status(200).json({
             success: true,

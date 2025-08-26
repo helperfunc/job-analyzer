@@ -34,6 +34,16 @@ export default async function handler(
   console.log(`🔍 Filtering jobs by skill '${skill}' for company: ${companyFilter}`)
 
   try {
+    // Check if database is available
+    if (!isSupabaseAvailable()) {
+      return res.status(500).json({
+        error: 'Database not available',
+        details: 'Database connection is not configured'
+      })
+    }
+
+    const supabase = getSupabase()
+    
     // Query jobs from Supabase that have the specified skill
     console.log(`🔍 Querying Supabase for jobs with skill: ${skill}`)
     

@@ -6,7 +6,7 @@ export default async function handler(
   res: NextApiResponse
 ) {
   // Check if Supabase is configured
-  if (!supabase) {
+  if (!isSupabaseAvailable()) {
     return res.status(200).json({
       success: false,
       message: 'Supabase not configured',

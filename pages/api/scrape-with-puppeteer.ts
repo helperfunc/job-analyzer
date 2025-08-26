@@ -1177,7 +1177,7 @@ export default async function handler(
     // Clear existing jobs for this company before adding new ones
     console.log(`🗑️ Clearing existing ${companyName} jobs from database...`)
     
-    if (!supabase) {
+    if (!isSupabaseAvailable()) {
       return res.status(503).json({
         success: false,
         error: 'Database not configured'

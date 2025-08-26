@@ -106,6 +106,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
   } else if (req.method === 'PUT') {
     try {
+      // Check if database is available
+      if (!isSupabaseAvailable()) {
+        return res.status(500).json({
+          error: 'Database not available',
+          details: 'Database connection is not configured'
+        })
+      }
+
+      const supabase = getSupabase()
+      
       const { id } = req.query
       const { job_id, title, url, resource_type, description } = req.body
 
@@ -152,6 +162,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
   } else if (req.method === 'DELETE') {
     try {
+      // Check if database is available
+      if (!isSupabaseAvailable()) {
+        return res.status(500).json({
+          error: 'Database not available',
+          details: 'Database connection is not configured'
+        })
+      }
+
+      const supabase = getSupabase()
+      
       const { id } = req.query
 
       if (!id || typeof id !== 'string') {

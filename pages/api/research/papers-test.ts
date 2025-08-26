@@ -5,7 +5,7 @@ export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
-  if (!supabase) {
+  if (!isSupabaseAvailable()) {
     return res.status(200).json({
       success: false,
       message: 'Database not configured',

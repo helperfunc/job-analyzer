@@ -5,6 +5,7 @@ export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
+  const supabase = getSupabase()
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
   const supabaseAnonKey = process.env.SUPABASE_ANON_KEY
 

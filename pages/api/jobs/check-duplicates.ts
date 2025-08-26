@@ -20,7 +20,7 @@ export default async function handler(
 
     const supabase = getSupabase()
     
-    if (!supabase) {
+    if (!isSupabaseAvailable()) {
       return res.status(503).json({ error: 'Database not configured' })
     }
 

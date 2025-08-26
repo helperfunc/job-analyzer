@@ -13,6 +13,7 @@ const supabase = createClient(supabaseUrl, supabaseKey)
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method === 'POST') {
     try {
+      const supabase = getSupabase()
       const { resource_id, job_id } = req.body
 
       if (!resource_id || !job_id) {
@@ -65,6 +66,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
   } else if (req.method === 'DELETE') {
     try {
+      const supabase = getSupabase()
       const { resource_id } = req.body
 
       if (!resource_id) {

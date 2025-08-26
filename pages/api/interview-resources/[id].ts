@@ -1,14 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next'
-import { createClient } from '@supabase/supabase-js'
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-
-if (!supabaseUrl || !supabaseKey) {
-  throw new Error('Missing Supabase environment variables')
-}
-
-const supabase = createClient(supabaseUrl, supabaseKey)
+import { getSupabase, isSupabaseAvailable } from '../../../lib/supabase'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const { id } = req.query
@@ -22,6 +13,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   if (req.method === 'DELETE') {
     try {
+      const supabase = getSupabase()
       const { error } = await supabase
         .from('interview_resources')
         .delete()
@@ -49,6 +41,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
   } else if (req.method === 'PUT') {
     try {
+      const supabase = getSupabase()
       const { title, url, resource_type, content, tags } = req.body
 
       const { data, error } = await supabase

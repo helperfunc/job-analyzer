@@ -39,7 +39,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   // Convert text user ID to UUID
   const userId = await getUserUUID(textUserId)
 
-  if (!supabase) {
+  if (!isSupabaseAvailable()) {
     return res.status(503).json({
       success: false,
       error: 'Database not configured'

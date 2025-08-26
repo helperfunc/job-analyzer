@@ -10,7 +10,7 @@ export default optionalAuth(async function handler(
   res: NextApiResponse
 ) {
   // Check if Supabase is configured
-  if (!supabase) {
+  if (!isSupabaseAvailable()) {
     // Return mock data when database is not configured
     const { company } = req.query
     let filteredPapers = mockPapers
@@ -154,7 +154,7 @@ export default optionalAuth(async function handler(
       })
     }
   } else if (req.method === 'POST') {
-    if (!supabase) {
+    if (!isSupabaseAvailable()) {
       return res.status(503).json({
         success: false,
         error: 'Database not configured'
@@ -212,7 +212,7 @@ export default optionalAuth(async function handler(
         })
       }
 
-      if (!supabase) {
+      if (!isSupabaseAvailable()) {
         return res.status(503).json({
           success: false,
           error: 'Database not configured'

@@ -40,7 +40,7 @@ export default async function handler(
     console.log(`📊 Getting summary for company: ${companyFilter}`)
     
     // Check if database is configured
-    if (!supabase) {
+    if (!isSupabaseAvailable()) {
       return res.status(503).json({ 
         error: 'Database not configured',
         message: 'Please configure database connection'

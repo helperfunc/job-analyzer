@@ -56,7 +56,7 @@ export default async function handler(
     // Convert to UUID
     const userId = await getUserUUID(textUserId)
 
-    if (!supabase) {
+    if (!isSupabaseAvailable()) {
       return res.status(503).json({
         success: false,
         error: 'Database not configured'

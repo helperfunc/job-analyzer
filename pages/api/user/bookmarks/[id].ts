@@ -1,6 +1,6 @@
 import { NextApiRequest, NextApiResponse } from 'next'
 import { authenticateUser, AuthenticatedRequest } from '../../../../lib/auth'
-import { supabase } from '../../../../lib/supabase'
+import { getSupabase, isSupabaseAvailable } from '../../../lib/supabase'
 
 export default authenticateUser(async function handler(
   req: AuthenticatedRequest, 
@@ -16,7 +16,7 @@ export default authenticateUser(async function handler(
   if (req.method === 'DELETE') {
     try {
       // If no database, return success
-      if (!supabase) {
+      if (!isSupabaseAvailable()) {
         return res.status(200).json({
           success: true,
           message: 'Bookmark removed (demo mode)'

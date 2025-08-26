@@ -17,7 +17,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const supabase = getSupabase()
     
-    if (!supabase) {
+    if (!isSupabaseAvailable()) {
       throw new Error('Database not configured')
     }
 

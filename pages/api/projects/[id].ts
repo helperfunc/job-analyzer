@@ -46,7 +46,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const supabase = getSupabase()
     
-      if (!supabase) {
+      if (!isSupabaseAvailable()) {
         return res.status(503).json({
           success: false,
           error: 'Database not configured'
@@ -107,7 +107,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         })
       }
 
-      if (!supabase) {
+      if (!isSupabaseAvailable()) {
         return res.status(503).json({
           success: false,
           error: 'Database not configured'
@@ -174,7 +174,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
   } else if (req.method === 'DELETE') {
     try {
-      if (!supabase) {
+      if (!isSupabaseAvailable()) {
         return res.status(503).json({
           success: false,
           error: 'Database not configured'
