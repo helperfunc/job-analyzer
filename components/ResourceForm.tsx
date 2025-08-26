@@ -14,7 +14,7 @@ interface FormData {
   resource_type: string
   url: string
   tags: string[]
-  visibility: string
+  visibility: 'public' | 'private' | 'friends'
   content: string
 }
 
@@ -30,7 +30,7 @@ const ResourceForm: React.FC<ResourceFormProps> = ({
     resource_type: initialData?.resource_type || 'tutorial',
     url: initialData?.url || '',
     tags: initialData?.tags || [],
-    visibility: initialData?.visibility || (isAuthenticated ? 'public' : 'public'), // Default to public for anonymous users
+    visibility: (initialData?.visibility as 'public' | 'private' | 'friends') || 'public', // Default to public
     content: initialData?.content || ''
   })
   
