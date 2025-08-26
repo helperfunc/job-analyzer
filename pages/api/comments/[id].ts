@@ -138,6 +138,16 @@ async function deleteComment(
   commentId: string
 ) {
   try {
+    // Check if database is available
+    if (!isSupabaseAvailable()) {
+      return res.status(500).json({
+        error: 'Database not available',
+        details: 'Database connection is not configured'
+      })
+    }
+
+    const supabase = getSupabase()
+    
     // 验证用户拥有该评论
     const { data: existingComment, error: checkError } = await supabase
       .from('comments')
