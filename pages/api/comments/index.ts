@@ -142,7 +142,7 @@ async function getComments(req: AuthenticatedRequest, res: NextApiResponse) {
           .eq('is_deleted', false)
           .order('created_at', { ascending: true })
 
-        comment.replies = replies || []
+        (comment as any).replies = replies || []
       }
     }
 
