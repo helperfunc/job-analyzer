@@ -109,8 +109,8 @@ async function getResources(req: AuthenticatedRequest, res: NextApiResponse) {
     }
 
     // 分页
-    const limitNum = parseInt(limit)
-    const offsetNum = parseInt(offset)
+    const limitNum = parseInt(Array.isArray(limit) ? limit[0] : limit)
+    const offsetNum = parseInt(Array.isArray(offset) ? offset[0] : offset)
     query = query
       .order('created_at', { ascending: false })
       .range(offsetNum, offsetNum + limitNum - 1)

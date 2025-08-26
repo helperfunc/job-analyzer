@@ -89,12 +89,17 @@ async function getBookmarks(
       query = query.eq('bookmark_type', type)
     }
 
-    if (limit && typeof limit === 'string') {
-      query = query.limit(parseInt(limit))
+    if (limit) {
+      const limitValue = Array.isArray(limit) ? limit[0] : limit
+      query = query.limit(parseInt(limitValue))
     }
 
-    if (offset && typeof offset === 'string') {
-      query = query.range(parseInt(offset), parseInt(offset) + (parseInt(limit as string) || 20) - 1)
+    if (offset) {
+      const offsetValue = Array.isArray(offset) ? offset[0] : offset
+      const limitValue = Array.isArray(limit) ? limit[0] : limit
+      const offsetNum = parseInt(offsetValue)
+      const limitNum = parseInt(limitValue || '20')
+      query = query.range(offsetNum, offsetNum + limitNum - 1)
     }
 
     const { data: bookmarks, error } = await query
