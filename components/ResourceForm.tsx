@@ -57,7 +57,7 @@ const ResourceForm: React.FC<ResourceFormProps> = ({
   const removeTag = (tagToRemove: string) => {
     setFormData({
       ...formData,
-      tags: formData.tags.filter(tag => tag !== tagToRemove)
+      tags: formData.tags.filter((tag: string) => tag !== tagToRemove)
     })
   }
 

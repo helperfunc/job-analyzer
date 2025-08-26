@@ -1,11 +1,7 @@
 # Build stage
 FROM node:18-alpine AS builder
 
-# Add build arguments for environment variables
-ARG DATABASE_URL
-ARG JWT_SECRET
-ARG GOOGLE_CLIENT_ID
-ARG GOOGLE_CLIENT_SECRET
+# Build arguments are not needed since we use AWS Secrets Manager
 
 WORKDIR /app
 
@@ -17,7 +13,7 @@ RUN npm ci
 COPY . .
 
 # Build the Next.js application
-ENV NEXT_TELEMETRY_DISABLED 1
+ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build
 
 # Production stage
@@ -25,8 +21,8 @@ FROM node:18-alpine AS runner
 
 WORKDIR /app
 
-ENV NODE_ENV production
-ENV NEXT_TELEMETRY_DISABLED 1
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
 
 # Create a non-root user
 RUN addgroup --system --gid 1001 nodejs
@@ -44,6 +40,6 @@ USER nextjs
 
 EXPOSE 3000
 
-ENV PORT 3000
+ENV PORT=3000
 
 CMD ["node", "server.js"]
