@@ -1,7 +1,7 @@
 import { NextApiRequest, NextApiResponse } from 'next'
 import * as cheerio from 'cheerio'
 import puppeteer from 'puppeteer'
-import { supabase } from '../../lib/supabase'
+import { getSupabase, isSupabaseAvailable } from '../../lib/supabase'
 
 interface Job {
   title: string
@@ -190,6 +190,16 @@ export default async function handler(
   })
   
   try {
+    // Check if database is available
+    if (!isSupabaseAvailable()) {
+      return res.status(500).json({
+        error: 'Database not available',
+        details: 'Database connection is not configured'
+      })
+    }
+
+    const supabase = getSupabase()
+    
     // Start scraping asynchronously and return immediately
     const scrapingLogic = async () => {
       

@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next'
-import { supabase } from '../../lib/supabase'
+import { getSupabase, isSupabaseAvailable } from '../../lib/supabase'
 
 interface DeepMindJob {
   id?: string
@@ -173,6 +173,16 @@ async function saveJobsToDatabase(jobs: DeepMindJob[]): Promise<DeepMindJob[]> {
 
   for (const job of jobs) {
     try {
+    // Check if database is available
+    if (!isSupabaseAvailable()) {
+      return res.status(500).json({
+        error: 'Database not available',
+        details: 'Database connection is not configured'
+      })
+    }
+
+    const supabase = getSupabase()
+    
       // Check if job already exists
       const { data: existingJob } = await supabase
         .from('jobs')

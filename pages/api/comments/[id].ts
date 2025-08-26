@@ -1,6 +1,6 @@
 import { NextApiRequest, NextApiResponse } from 'next'
 import { authenticateUser, AuthenticatedRequest } from '../../../lib/auth'
-import { supabase } from '../../../lib/supabase'
+import { getSupabase, isSupabaseAvailable } from '../../../lib/supabase'
 
 export default authenticateUser(async function handler(
   req: AuthenticatedRequest, 
@@ -29,6 +29,16 @@ async function updateComment(
   commentId: string
 ) {
   try {
+    // Check if database is available
+    if (!isSupabaseAvailable()) {
+      return res.status(500).json({
+        error: 'Database not available',
+        details: 'Database connection is not configured'
+      })
+    }
+
+    const supabase = getSupabase()
+    
     const { content } = req.body
 
     if (!content || typeof content !== 'string') {

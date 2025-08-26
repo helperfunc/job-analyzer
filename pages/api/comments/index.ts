@@ -1,6 +1,6 @@
 import { NextApiRequest, NextApiResponse } from 'next'
 import { authenticateUser, optionalAuth, AuthenticatedRequest } from '../../../lib/auth'
-import { supabase } from '../../../lib/supabase'
+import { getSupabase, isSupabaseAvailable } from '../../../lib/supabase'
 
 interface CommentRequest {
   target_type: 'job' | 'paper' | 'resource' | 'user_resource'
@@ -31,6 +31,16 @@ export default optionalAuth(async function handler(
 
 async function getComments(req: AuthenticatedRequest, res: NextApiResponse) {
   try {
+    // Check if database is available
+    if (!isSupabaseAvailable()) {
+      return res.status(500).json({
+        error: 'Database not available',
+        details: 'Database connection is not configured'
+      })
+    }
+
+    const supabase = getSupabase()
+    
     const { 
       target_type,
       job_id,

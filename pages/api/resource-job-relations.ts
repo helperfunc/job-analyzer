@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next'
-import { supabase } from '../../lib/supabase'
+import { getSupabase, isSupabaseAvailable } from '../../lib/supabase'
 
 export default async function handler(
   req: NextApiRequest,
@@ -33,6 +33,16 @@ async function handleGet(req: NextApiRequest, res: NextApiResponse) {
   }
 
   try {
+    // Check if database is available
+    if (!isSupabaseAvailable()) {
+      return res.status(500).json({
+        error: 'Database not available',
+        details: 'Database connection is not configured'
+      })
+    }
+
+    const supabase = getSupabase()
+    
     // Get job resources with their relations
     const { data: jobResourceRelations, error: jobError } = await supabase
       .from('job_resource_relations')

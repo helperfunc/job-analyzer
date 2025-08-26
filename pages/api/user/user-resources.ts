@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next'
-import { supabase } from '../../../lib/supabase'
+import { getSupabase, isSupabaseAvailable } from '../../../lib/supabase'
 import { getUserUUID } from '../../../lib/auth-helpers'
 import jwt from 'jsonwebtoken'
 
@@ -105,6 +105,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   } else if (req.method === 'POST') {
     try {
+    // Check if database is available
+    if (!isSupabaseAvailable()) {
+      return res.status(500).json({
+        error: 'Database not available',
+        details: 'Database connection is not configured'
+      })
+    }
+
+    const supabase = getSupabase()
+    
       // Create new resource
       const { title, description, resource_type, url, tags, visibility, content } = req.body
 
