@@ -52,11 +52,11 @@
         },
         {
           "name": "NEXT_PUBLIC_SUPABASE_URL",
-          "valueFrom": "arn:aws:secretsmanager:us-east-1:076181803263:secret:job-analyzer/supabase-url"
+          "valueFrom": "arn:aws:secretsmanager:us-east-1:076181803263:secret:job-analyzer/supabase-url-3fqNi9"
         },
         {
           "name": "NEXT_PUBLIC_SUPABASE_ANON_KEY",
-          "valueFrom": "arn:aws:secretsmanager:us-east-1:076181803263:secret:job-analyzer/supabase-anon-key"
+          "valueFrom": "arn:aws:secretsmanager:us-east-1:076181803263:secret:job-analyzer/supabase-anon-key-tiVJBJ"
         }
       ],
       "logConfiguration": {
