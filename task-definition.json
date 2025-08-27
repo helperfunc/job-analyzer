@@ -7,7 +7,7 @@
   "containerDefinitions": [
     {
       "name": "job-analyzer",
-      "image": "job-analyzer",
+      "image": "076181803263.dkr.ecr.us-east-1.amazonaws.com/job-analyzer:latest",
       "portMappings": [
         {
           "containerPort": 3000,
@@ -15,13 +15,6 @@
         }
       ],
       "essential": true,
-      "healthCheck": {
-        "command": ["CMD-SHELL", "node -e \"require('http').get('http://localhost:3000/api/health', (res) => { process.exit(res.statusCode === 200 ? 0 : 1); }).on('error', () => { process.exit(1); });\""],
-        "interval": 30,
-        "timeout": 5,
-        "retries": 3,
-        "startPeriod": 90
-      },
       "environment": [
         {
           "name": "NODE_ENV",
@@ -30,6 +23,14 @@
         {
           "name": "PORT",
           "value": "3000"
+        },
+        {
+          "name": "HOSTNAME",
+          "value": "0.0.0.0"
+        },
+        {
+          "name": "NEXT_TELEMETRY_DISABLED",
+          "value": "1"
         }
       ],
       "secrets": [
