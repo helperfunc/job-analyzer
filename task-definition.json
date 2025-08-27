@@ -49,6 +49,14 @@
         {
           "name": "GOOGLE_CLIENT_SECRET",
           "valueFrom": "arn:aws:secretsmanager:us-east-1:076181803263:secret:job-analyzer/google-client-secret-JojSUb"
+        },
+        {
+          "name": "NEXT_PUBLIC_SUPABASE_URL",
+          "valueFrom": "arn:aws:secretsmanager:us-east-1:076181803263:secret:job-analyzer/supabase-url"
+        },
+        {
+          "name": "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+          "valueFrom": "arn:aws:secretsmanager:us-east-1:076181803263:secret:job-analyzer/supabase-anon-key"
         }
       ],
       "logConfiguration": {
