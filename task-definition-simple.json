@@ -16,11 +16,11 @@
       ],
       "essential": true,
       "healthCheck": {
-        "command": ["CMD-SHELL", "node -e \"require('http').get('http://localhost:3000/api/health', (res) => { process.exit(res.statusCode === 200 ? 0 : 1); }).on('error', () => { process.exit(1); });\""],
+        "command": ["CMD-SHELL", "curl -f http://localhost:3000/api/health || exit 1"],
         "interval": 30,
         "timeout": 5,
         "retries": 3,
-        "startPeriod": 90
+        "startPeriod": 60
       },
       "environment": [
         {
@@ -30,24 +30,14 @@
         {
           "name": "PORT",
           "value": "3000"
-        }
-      ],
-      "secrets": [
+        },
         {
           "name": "DATABASE_URL",
-          "valueFrom": "arn:aws:secretsmanager:us-east-1:076181803263:secret:job-analyzer/database-url-oSOWVT"
+          "value": "dummy-for-testing"
         },
         {
           "name": "JWT_SECRET",
-          "valueFrom": "arn:aws:secretsmanager:us-east-1:076181803263:secret:job-analyzer/jwt-secret-wxe5Ds"
-        },
-        {
-          "name": "GOOGLE_CLIENT_ID",
-          "valueFrom": "arn:aws:secretsmanager:us-east-1:076181803263:secret:job-analyzer/google-client-id-FtIAJB"
-        },
-        {
-          "name": "GOOGLE_CLIENT_SECRET",
-          "valueFrom": "arn:aws:secretsmanager:us-east-1:076181803263:secret:job-analyzer/google-client-secret-JojSUb"
+          "value": "dummy-jwt-secret-for-testing"
         }
       ],
       "logConfiguration": {
@@ -55,7 +45,8 @@
         "options": {
           "awslogs-group": "/ecs/job-analyzer",
           "awslogs-region": "us-east-1",
-          "awslogs-stream-prefix": "ecs"
+          "awslogs-stream-prefix": "ecs",
+          "awslogs-create-group": "true"
         }
       }
     }

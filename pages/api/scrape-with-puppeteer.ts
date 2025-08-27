@@ -1333,6 +1333,12 @@ export default async function handler(
       })
       .finally(() => {
         if (timeoutId) clearTimeout(timeoutId)
+        // Ensure scraping status is cleared even on timeout
+        setTimeout(() => {
+          fetch(`${req.headers.origin || 'http://localhost:3000'}/api/scraping-status?company=${companyName.toLowerCase()}`, {
+            method: 'DELETE'
+          }).catch(() => {})
+        }, timeout + 5000) // 5 seconds after timeout
       })
     
     // Return immediately to avoid browser timeout

@@ -212,6 +212,9 @@ export default function Home() {
                 clearInterval(pollingIntervalRef.current)
                 pollingIntervalRef.current = null
               }
+              
+              // Cache the result for this company
+              localStorage.setItem(`${currentCompany}-jobs-analysis-result`, JSON.stringify(data))
               return
             } else {
               console.log(`📊 No data found yet, but server says scraping is not active (poll ${pollCount}/${maxPolls})`)
@@ -250,6 +253,8 @@ export default function Home() {
               if (data.summary?.total_jobs > 0) {
                 console.log(`📊 Found ${data.summary.total_jobs} ${currentCompany} jobs after timeout`)
                 setResult(data)
+                // Cache the result
+                localStorage.setItem(`${currentCompany}-jobs-analysis-result`, JSON.stringify(data))
               }
             }
           } catch (error) {
@@ -587,7 +592,11 @@ export default function Home() {
         setResult(data)
         setScrapingInProgress(false)
         localStorage.removeItem('scraping-in-progress')
-        localStorage.setItem('openai-jobs-analysis-result', JSON.stringify(data))
+        
+        // Use dynamic company name for caching
+        const currentCompany = url.includes('anthropic.com') ? 'anthropic' : 
+                              url.includes('deepmind') ? 'deepmind' : 'openai'
+        localStorage.setItem(`${currentCompany}-jobs-analysis-result`, JSON.stringify(data))
       } else {
         throw new Error(data.error || 'Scraping failed')
       }
