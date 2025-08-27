@@ -13,6 +13,7 @@ interface Resource {
   content?: string
   tags?: string[]
   created_at: string
+  source?: string
   job?: {
     id: string
     title: string
@@ -366,7 +367,7 @@ export default function ResourcesPage() {
                     
                     <div className="flex gap-2 ml-4">
                       <button
-                        onClick={() => handleDelete(resource.id, resource.source)}
+                        onClick={() => handleDelete(resource.id, resource.source || '')}
                         className="text-red-600 hover:text-red-800 p-1"
                         title="Delete resource"
                       >

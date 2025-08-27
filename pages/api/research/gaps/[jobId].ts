@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next'
-import { getSupabase, isSupabaseAvailable } from '../../../lib/supabase'
+import { getSupabase, isSupabaseAvailable } from '../../../../lib/supabase'
 
 // Empty mock data fallback
 const mockGapAnalysis = {
@@ -50,6 +50,8 @@ export default async function handler(
           data: null
         })
       }
+
+      const supabase = getSupabase()
 
       // Get skill gap analysis and related project recommendations
       const { data, error } = await supabase

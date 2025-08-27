@@ -114,6 +114,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         })
       }
 
+      const supabase = getSupabase()
+
       // Check if project exists and user owns it
       const { data: existingProject } = await supabase
         .from('projects')
@@ -180,6 +182,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           error: 'Database not configured'
         })
       }
+
+      const supabase = getSupabase()
 
       // Check if project exists and user owns it
       const { data: existingProject } = await supabase

@@ -115,28 +115,29 @@ async function getBookmarks(
     // 获取resource详情（如果有resource bookmarks）
     const resourceBookmarks = bookmarks?.filter(b => b.bookmark_type === 'resource' && b.resource_id) || []
     
-    for (const bookmark of resourceBookmarks) {
+    for (let i = 0; i < resourceBookmarks.length; i++) {
+      const bookmark = resourceBookmarks[i]
       if (bookmark.resource_type === 'job_resource') {
-        const { data: resource } = await supabase
+        const result = await supabase
           .from('job_resources')
           .select('id, title, description, url, resource_type, created_at')
           .eq('id', bookmark.resource_id)
           .single()
-        bookmark.resource_details = resource
+        ;(bookmark as any).resource_details = result.data
       } else if (bookmark.resource_type === 'interview_resource') {
-        const { data: resource } = await supabase
+        const result2 = await supabase
           .from('interview_resources')
           .select('id, title, content, url, resource_type, created_at')
           .eq('id', bookmark.resource_id)
           .single()
-        bookmark.resource_details = resource
+        ;(bookmark as any).resource_details = result2.data
       } else if (bookmark.resource_type === 'user_resource') {
-        const { data: resource } = await supabase
+        const result3 = await supabase
           .from('user_resources')
           .select('id, title, description, url, resource_type, visibility, created_at')
           .eq('id', bookmark.resource_id)
           .single()
-        bookmark.resource_details = resource
+        ;(bookmark as any).resource_details = result3.data
       }
     }
 
@@ -180,6 +181,14 @@ async function addBookmark(
     if (bookmarkData.bookmark_type === 'resource' && (!bookmarkData.resource_id || !bookmarkData.resource_type)) {
       return res.status(400).json({ error: 'resource_id and resource_type are required for resource bookmarks' })
     }
+
+    if (!isSupabaseAvailable()) {
+      return res.status(503).json({
+        error: 'Database not configured'
+      })
+    }
+
+    const supabase = getSupabase()
 
     // 检查是否已经收藏
     let existingQuery = supabase
@@ -259,6 +268,14 @@ async function updateBookmark(
       return res.status(400).json({ error: 'bookmark_id is required' })
     }
 
+    if (!isSupabaseAvailable()) {
+      return res.status(503).json({
+        error: 'Database not configured'
+      })
+    }
+
+    const supabase = getSupabase()
+
     const { data: bookmark, error } = await supabase
       .from('user_bookmarks')
       .update({
@@ -309,6 +326,14 @@ async function removeBookmark(
     if (!bookmark_id || typeof bookmark_id !== 'string') {
       return res.status(400).json({ error: 'bookmark_id is required' })
     }
+
+    if (!isSupabaseAvailable()) {
+      return res.status(503).json({
+        error: 'Database not configured'
+      })
+    }
+
+    const supabase = getSupabase()
 
     const { error } = await supabase
       .from('user_bookmarks')

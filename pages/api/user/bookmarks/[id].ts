@@ -1,6 +1,6 @@
 import { NextApiRequest, NextApiResponse } from 'next'
 import { authenticateUser, AuthenticatedRequest } from '../../../../lib/auth'
-import { getSupabase, isSupabaseAvailable } from '../../../lib/supabase'
+import { getSupabase, isSupabaseAvailable } from '../../../../lib/supabase'
 
 export default authenticateUser(async function handler(
   req: AuthenticatedRequest, 
@@ -23,6 +23,7 @@ export default authenticateUser(async function handler(
         })
       }
 
+      const supabase = getSupabase()
       const { error } = await supabase
         .from('user_bookmarks')
         .delete()

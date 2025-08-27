@@ -252,6 +252,8 @@ export default function JobDetail() {
   }
 
   const removePaperFromJob = async (paperId: string) => {
+    if (!job) return
+    
     try {
       const response = await fetch('/api/research/unrelate-paper', {
         method: 'DELETE',
@@ -357,8 +359,10 @@ export default function JobDetail() {
   }
 
   const linkResourceToJob = async (resourceId: string) => {
+    if (!job) return
+    
     // Ensure job is saved before linking resources
-    if (!isJobSaved && job) {
+    if (!isJobSaved) {
       showToastMessage('⏳ Saving job first...')
       await saveJobToDatabase(job)
       // Wait a bit for database to process
@@ -399,6 +403,8 @@ export default function JobDetail() {
   }
 
   const unlinkResourceFromJob = async (resourceId: string) => {
+    if (!job) return
+    
     try {
       const response = await fetch(`/api/resource-job-relations?job_id=${job.id}&resource_id=${resourceId}&resource_type=job_resources`, {
         method: 'DELETE'
@@ -422,6 +428,8 @@ export default function JobDetail() {
 
 
   const addPaperToJob = async (paperId: string) => {
+    if (!job) return
+    
     try {
       const response = await fetch('/api/research/relate-paper', {
         method: 'POST',

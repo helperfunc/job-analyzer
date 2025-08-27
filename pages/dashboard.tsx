@@ -355,7 +355,7 @@ export default function Dashboard() {
                           )}
                           {(bookmark.metadata?.tags && bookmark.metadata.tags.length > 0) && (
                             <div className="flex flex-wrap gap-1 mt-2">
-                              {bookmark.metadata.tags.slice(0, 3).map((tag, index) => (
+                              {bookmark.metadata.tags.slice(0, 3).map((tag: string, index: number) => (
                                 <span key={index} className="px-2 py-1 text-xs bg-gray-100 text-gray-600 rounded">
                                   {tag}
                                 </span>
@@ -481,7 +481,7 @@ export default function Dashboard() {
                           <p className="text-sm text-gray-600 mb-2">{resource.description}</p>
                           {resource.tags && resource.tags.length > 0 && (
                             <div className="flex flex-wrap gap-1">
-                              {resource.tags.map((tag, index) => (
+                              {resource.tags.map((tag: string, index: number) => (
                                 <span key={index} className="px-2 py-1 text-xs bg-gray-100 text-gray-600 rounded">
                                   {tag}
                                 </span>

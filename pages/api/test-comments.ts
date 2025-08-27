@@ -76,6 +76,6 @@ export default async function handler(
       }
     })
   } catch (error) {
-    return res.status(500).json({ error: error.message })
+    return res.status(500).json({ error: error instanceof Error ? error.message : 'Unknown error' })
   }
 }

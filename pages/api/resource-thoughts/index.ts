@@ -77,6 +77,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         })
       }
 
+      const supabase = getSupabase()
       const { data: newThought, error } = await supabase
         .from('resource_thoughts')
         .insert([{

@@ -48,6 +48,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   if (req.method === 'GET') {
     try {
+      const supabase = getSupabase()
+      
       // Get user-created resources from all resource tables
       const [
         { data: userResources, error: userResourcesError },

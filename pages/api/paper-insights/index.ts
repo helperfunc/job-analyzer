@@ -17,6 +17,7 @@ export default async function handler(
   if (req.method === 'GET') {
     try {
       const { paper_id, user_id } = req.query
+      const supabase = getSupabase()
 
       let query = supabase
         .from('paper_insights')

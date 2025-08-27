@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next'
-import { getSupabase, isSupabaseAvailable } from '../../../lib/supabase'
+import { getSupabase, isSupabaseAvailable } from '../../../../../lib/supabase'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') {
@@ -12,12 +12,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(400).json({ error: 'Resource ID is required' })
   }
 
+  if (!isSupabaseAvailable()) {
+    return res.status(503).json({
+      error: 'Database not configured'
+    })
+  }
+
+  const supabase = getSupabase()
+
   try {
     // 增加浏览量
     const { data: resource, error } = await supabase
       .from('user_resources')
       .update({
-        view_count: supabase.sql`view_count + 1`
+        view_count: (supabase as any).sql`view_count + 1`
       })
       .eq('id', id)
       .eq('visibility', 'public') // 只能查看公开资源

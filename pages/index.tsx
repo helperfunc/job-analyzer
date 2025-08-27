@@ -912,7 +912,7 @@ export default function Home() {
                     return (
                       <>
                         <br />
-                        Error parsing scraping state: {e.message}
+                        Error parsing scraping state: {e instanceof Error ? e.message : 'Unknown error'}
                       </>
                     )
                   }

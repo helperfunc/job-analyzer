@@ -123,6 +123,14 @@ async function handlePost(req: NextApiRequest, res: NextApiResponse) {
     })
   }
 
+  if (!isSupabaseAvailable()) {
+    return res.status(503).json({
+      error: 'Database not configured'
+    })
+  }
+
+  const supabase = getSupabase()
+
   try {
     let data, error
 
@@ -172,6 +180,14 @@ async function handleDelete(req: NextApiRequest, res: NextApiResponse) {
       error: 'Missing required fields: job_id, resource_id, resource_type'
     })
   }
+
+  if (!isSupabaseAvailable()) {
+    return res.status(503).json({
+      error: 'Database not configured'
+    })
+  }
+
+  const supabase = getSupabase()
 
   try {
     let error

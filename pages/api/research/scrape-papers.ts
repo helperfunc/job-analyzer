@@ -172,7 +172,7 @@ function generateTags(text: string): string[] {
     }
   })
   
-  return [...new Set(tags)] // Remove duplicates
+  return Array.from(new Set(tags)) // Remove duplicates
 }
 
 // Enhanced scraping functions

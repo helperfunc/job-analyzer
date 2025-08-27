@@ -171,17 +171,16 @@ async function scrapeDeepMindPapers(maxPages: number = 5): Promise<DeepMindPaper
 async function saveJobsToDatabase(jobs: DeepMindJob[]): Promise<DeepMindJob[]> {
   const savedJobs: DeepMindJob[] = []
 
+  // Check if database is available
+  if (!isSupabaseAvailable()) {
+    console.log('Database not available, skipping job save')
+    return []
+  }
+
+  const supabase = getSupabase()
+
   for (const job of jobs) {
     try {
-    // Check if database is available
-    if (!isSupabaseAvailable()) {
-      return res.status(500).json({
-        error: 'Database not available',
-        details: 'Database connection is not configured'
-      })
-    }
-
-    const supabase = getSupabase()
     
       // Check if job already exists
       const { data: existingJob } = await supabase
@@ -229,6 +228,14 @@ async function saveJobsToDatabase(jobs: DeepMindJob[]): Promise<DeepMindJob[]> {
 
 async function savePapersToDatabase(papers: DeepMindPaper[]): Promise<DeepMindPaper[]> {
   const savedPapers: DeepMindPaper[] = []
+
+  // Check if database is available
+  if (!isSupabaseAvailable()) {
+    console.log('Database not available, skipping paper save')
+    return []
+  }
+
+  const supabase = getSupabase()
 
   for (const paper of papers) {
     try {

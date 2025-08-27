@@ -226,6 +226,14 @@ async function removeVote(
       })
     }
 
+    if (!isSupabaseAvailable()) {
+      return res.status(503).json({
+        error: 'Database not configured'
+      })
+    }
+
+    const supabase = getSupabase()
+
     let deleteQuery = supabase
       .from('votes')
       .delete()
@@ -282,6 +290,14 @@ async function getVoteStatus(
         error: 'target_type is required'
       })
     }
+
+    if (!isSupabaseAvailable()) {
+      return res.status(503).json({
+        error: 'Database not configured'
+      })
+    }
+
+    const supabase = getSupabase()
 
     let voteQuery = supabase
       .from('votes')

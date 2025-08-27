@@ -317,7 +317,7 @@ export default async function handler(
       }
       
       // Look for JSON data in script tags
-      const jsonMatches = html.match(/<script[^>]*>(.*?jobs.*?)<\/script>/gis)
+      const jsonMatches = html.match(/<script[^>]*>(.*?jobs.*?)<\/script>/gi)
       if (jsonMatches) {
         console.log('📊 Found potential job data in scripts:', jsonMatches.length, 'matches')
       }
@@ -448,7 +448,7 @@ export default async function handler(
                 title,
                 url: jobUrl,
                 department,
-                skills: [...new Set(inferredSkills)]
+                skills: Array.from(new Set(inferredSkills))
               })
               processedUrls.add(jobUrl)
             }
@@ -985,7 +985,7 @@ export default async function handler(
           }
           
           // Remove duplicates
-          const uniqueSkills = [...new Set(skills)]
+          const uniqueSkills = Array.from(new Set(skills))
           
           // Clean up title formatting - add spaces where needed
           let cleanTitle = jobLink.title
@@ -1259,7 +1259,7 @@ export default async function handler(
       // Count skills from ACTUAL jobs data
       actualJobs.forEach((job: any) => {
         if (job.skills && job.skills.length > 0) {
-          job.skills.forEach(skill => {
+          job.skills.forEach((skill: string) => {
             skillsCount[skill] = (skillsCount[skill] || 0) + 1
           })
         }

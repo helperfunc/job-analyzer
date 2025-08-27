@@ -102,6 +102,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         })
       }
 
+      const supabase = getSupabase()
+
       // Insert into database
       const { data: newProject, error } = await supabase
         .from('projects')

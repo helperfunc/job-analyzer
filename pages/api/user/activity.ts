@@ -125,7 +125,7 @@ export default async function handler(
     console.log('Resource thoughts count:', resourceThoughts?.length || 0)
 
     // Combine all activities
-    const activities = []
+    const activities: any[] = []
 
     // Add job thoughts
     if (jobThoughtsError) {
@@ -133,7 +133,7 @@ export default async function handler(
     }
     if (jobThoughts && !jobThoughtsError) {
       console.log('Job thoughts sample:', jobThoughts[0])
-      jobThoughts.forEach(thought => {
+      jobThoughts.forEach((thought: any) => {
         activities.push({
           id: thought.id,
           type: 'job_thought',
@@ -152,7 +152,7 @@ export default async function handler(
 
     // Add paper insights
     if (paperInsights && !paperInsightsError) {
-      paperInsights.forEach(insight => {
+      paperInsights.forEach((insight: any) => {
         activities.push({
           id: insight.id,
           type: 'paper_insight',
@@ -171,7 +171,7 @@ export default async function handler(
 
     // Add resource thoughts if they exist
     if (resourceThoughts && !resourceThoughtsError) {
-      resourceThoughts.forEach(thought => {
+      resourceThoughts.forEach((thought: any) => {
         activities.push({
           id: thought.id,
           type: 'resource_thought',

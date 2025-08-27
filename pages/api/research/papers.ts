@@ -171,6 +171,7 @@ export default optionalAuth(async function handler(
         })
       }
 
+      const supabase = getSupabase()
       const { data, error } = await supabase
         .from('research_papers')
         .insert([{
@@ -219,6 +220,7 @@ export default optionalAuth(async function handler(
         })
       }
 
+      const supabase = getSupabase()
       const { error } = await supabase
         .from('research_papers')
         .delete()

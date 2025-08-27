@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next'
-import { getSupabase, isSupabaseAvailable } from '../../../lib/supabase'
+import { getSupabase, isSupabaseAvailable } from '../../../../lib/supabase'
 
 // Empty mock data fallback
 const mockInsights: any[] = []
@@ -35,6 +35,7 @@ export default async function handler(
     
     try {
       const { user_id } = req.query
+      const supabase = getSupabase()
       
       let query = supabase
         .from('user_insights')

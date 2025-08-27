@@ -36,7 +36,7 @@ export default async function handler(
     })
   }
 
-  let browser = null
+  let browser: any = null
 
   try {
     // Check if database is available
