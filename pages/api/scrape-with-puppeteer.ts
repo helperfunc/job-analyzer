@@ -1,6 +1,7 @@
 import { NextApiRequest, NextApiResponse } from 'next'
 import * as cheerio from 'cheerio'
 import puppeteer from 'puppeteer'
+import chromium from '@sparticuz/chromium'
 import { supabase } from '../../lib/supabase'
 
 interface Job {
@@ -209,28 +210,111 @@ export default async function handler(
       const mainUrl = url
       let html: string
       
-      // Temporarily disable Puppeteer to debug - use enhanced fetch for all companies
-      console.log(`🔍 Using enhanced fetch for ${companyName}...`)
-      const response = await fetch(mainUrl, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-          'Accept-Language': 'en-US,en;q=0.9',
-          'Cache-Control': 'no-cache',
-          'Pragma': 'no-cache'
+      // Check if we're in AWS environment (Lambda/EC2)
+      const isAWS = process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.AWS_EXECUTION_ENV || process.env.AWS_REGION
+      const isProduction = process.env.NODE_ENV === 'production'
+      
+      // For companies that need JavaScript rendering (OpenAI), use Puppeteer
+      // For AWS, use special configuration
+      if (isOpenAI && (isAWS || isProduction)) {
+        console.log(`🔍 Using Puppeteer with AWS configuration for ${companyName}...`)
+        
+        try {
+          // AWS Lambda specific configuration
+          chromium.setHeadlessMode = true
+          chromium.setGraphicsMode = false
+          
+          const browser = await puppeteer.launch({
+            args: isAWS ? chromium.args : ['--no-sandbox', '--disable-setuid-sandbox'],
+            defaultViewport: chromium.defaultViewport,
+            executablePath: isAWS ? await chromium.executablePath() : undefined,
+            headless: true,
+            ignoreHTTPSErrors: true,
+          })
+          
+          const page = await browser.newPage()
+          await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
+          
+          console.log(`📄 Navigating to ${mainUrl}...`)
+          await page.goto(mainUrl, { waitUntil: 'networkidle2', timeout: 30000 })
+          
+          // Wait for content to load
+          await page.waitForTimeout(3000)
+          
+          html = await page.content()
+          console.log(`📄 Received HTML via Puppeteer (${html.length} bytes)`)
+          
+          await browser.close()
+        } catch (puppeteerError) {
+          console.error('❌ Puppeteer failed:', puppeteerError)
+          console.log('⚠️ Falling back to regular fetch...')
+          
+          // Fallback to regular fetch if Puppeteer fails
+          const response = await fetch(mainUrl, {
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+              'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+              'Accept-Language': 'en-US,en;q=0.9',
+              'Cache-Control': 'no-cache',
+              'Pragma': 'no-cache'
+            }
+          })
+          
+          if (!response.ok) {
+            throw new Error(`Failed to fetch careers page: ${response.status}`)
+          }
+          
+          html = await response.text()
+          console.log(`📄 Received HTML via fetch fallback (${html.length} bytes)`)
         }
-      })
-      
-      if (!response.ok) {
-        throw new Error(`Failed to fetch careers page: ${response.status}`)
-      }
-
-      html = await response.text()
-      console.log(`📄 Received HTML (${html.length} bytes)`)
-      
-      if (false) { // Disabled block
-        // For other companies (like Anthropic), use regular fetch
-        // For other companies (like Anthropic), use regular fetch
+      } else if (isOpenAI && !isAWS && !isProduction) {
+        // Local development with regular Puppeteer
+        console.log(`🔍 Using local Puppeteer for ${companyName}...`)
+        
+        try {
+          const browser = await puppeteer.launch({
+            headless: true,
+            args: ['--no-sandbox', '--disable-setuid-sandbox']
+          })
+          
+          const page = await browser.newPage()
+          await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
+          
+          console.log(`📄 Navigating to ${mainUrl}...`)
+          await page.goto(mainUrl, { waitUntil: 'networkidle2', timeout: 30000 })
+          
+          // Wait for content to load
+          await page.waitForTimeout(3000)
+          
+          html = await page.content()
+          console.log(`📄 Received HTML via local Puppeteer (${html.length} bytes)`)
+          
+          await browser.close()
+        } catch (puppeteerError) {
+          console.error('❌ Local Puppeteer failed:', puppeteerError)
+          console.log('⚠️ Falling back to regular fetch...')
+          
+          // Fallback to regular fetch
+          const response = await fetch(mainUrl, {
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+              'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+              'Accept-Language': 'en-US,en;q=0.9',
+              'Cache-Control': 'no-cache',
+              'Pragma': 'no-cache'
+            }
+          })
+          
+          if (!response.ok) {
+            throw new Error(`Failed to fetch careers page: ${response.status}`)
+          }
+          
+          html = await response.text()
+          console.log(`📄 Received HTML via fetch fallback (${html.length} bytes)`)
+        }
+      } else {
+        // For other companies (like Anthropic, DeepMind), use regular fetch
+        console.log(`🔍 Using enhanced fetch for ${companyName}...`)
         const response = await fetch(mainUrl, {
           headers: {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
