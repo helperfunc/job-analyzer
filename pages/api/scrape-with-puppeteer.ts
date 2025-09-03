@@ -231,14 +231,11 @@ export default async function handler(
         
         try {
           // AWS Lambda specific configuration
-          chromium.setHeadlessMode = true
-          chromium.setGraphicsMode = false
-          
           const browser = await puppeteer.launch({
             args: isAWS ? chromium.args : ['--no-sandbox', '--disable-setuid-sandbox'],
             defaultViewport: chromium.defaultViewport,
             executablePath: isAWS ? await chromium.executablePath() : undefined,
-            headless: true,
+            headless: 'new',
             ignoreHTTPSErrors: true,
           })
           
@@ -283,7 +280,7 @@ export default async function handler(
         
         try {
           const browser = await puppeteer.launch({
-            headless: true,
+            headless: 'new',
             args: ['--no-sandbox', '--disable-setuid-sandbox']
           })
           
