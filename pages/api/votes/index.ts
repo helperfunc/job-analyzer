@@ -1,6 +1,6 @@
 import { NextApiRequest, NextApiResponse } from 'next'
 import { authenticateUser, AuthenticatedRequest } from '../../../lib/auth'
-import { supabase } from '../../../lib/supabase'
+import { getSupabase, isSupabaseAvailable } from '../../../lib/supabase'
 
 interface VoteRequest {
   target_type: 'job' | 'paper' | 'resource' | 'user_resource' | 'comment'
@@ -35,6 +35,16 @@ async function castVote(
   userId: string
 ) {
   try {
+    // Check if database is available
+    if (!isSupabaseAvailable()) {
+      return res.status(500).json({
+        error: 'Database not available',
+        details: 'Database connection is not configured'
+      })
+    }
+
+    const supabase = getSupabase()
+    
     const voteData: VoteRequest = req.body
 
     if (!voteData.target_type || !voteData.vote_type) {
@@ -216,6 +226,14 @@ async function removeVote(
       })
     }
 
+    if (!isSupabaseAvailable()) {
+      return res.status(503).json({
+        error: 'Database not configured'
+      })
+    }
+
+    const supabase = getSupabase()
+
     let deleteQuery = supabase
       .from('votes')
       .delete()
@@ -272,6 +290,14 @@ async function getVoteStatus(
         error: 'target_type is required'
       })
     }
+
+    if (!isSupabaseAvailable()) {
+      return res.status(503).json({
+        error: 'Database not configured'
+      })
+    }
+
+    const supabase = getSupabase()
 
     let voteQuery = supabase
       .from('votes')

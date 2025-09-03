@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next'
-import { supabase } from '../../../lib/supabase'
+import { getSupabase, isSupabaseAvailable } from '../../../lib/supabase'
 import OpenAI from 'openai'
 
 const openai = new OpenAI({
@@ -18,6 +18,16 @@ export default async function handler(
   }
 
   try {
+    // Check if database is available
+    if (!isSupabaseAvailable()) {
+      return res.status(500).json({
+        error: 'Database not available',
+        details: 'Database connection is not configured'
+      })
+    }
+
+    const supabase = getSupabase()
+    
     const { skill_gap_id } = req.body
 
     if (!skill_gap_id) {

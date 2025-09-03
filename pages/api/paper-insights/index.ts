@@ -1,11 +1,13 @@
 import { NextApiRequest, NextApiResponse } from 'next'
-import { supabase } from '../../../lib/supabase'
+import { getSupabase, isSupabaseAvailable } from '../../../lib/supabase'
+import { getCurrentUser } from '../../../lib/auth'
+import { getUserUUID } from '../../../lib/auth-helpers'
 
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
-  if (!supabase) {
+  if (!isSupabaseAvailable()) {
     return res.status(503).json({
       success: false,
       error: 'Database not configured'
@@ -15,6 +17,7 @@ export default async function handler(
   if (req.method === 'GET') {
     try {
       const { paper_id, user_id } = req.query
+      const supabase = getSupabase()
 
       let query = supabase
         .from('paper_insights')
@@ -46,9 +49,18 @@ export default async function handler(
     }
   } else if (req.method === 'POST') {
     try {
+    // Check if database is available
+    if (!isSupabaseAvailable()) {
+      return res.status(500).json({
+        error: 'Database not available',
+        details: 'Database connection is not configured'
+      })
+    }
+
+    const supabase = getSupabase()
+    
       const { 
         paper_id, 
-        user_id, 
         insight, 
         insight_type,
         thought_type,
@@ -65,11 +77,16 @@ export default async function handler(
         })
       }
 
+      // Get current user
+      const user = await getCurrentUser(req)
+      const textUserId = user ? user.userId : 'default'
+      const userId = await getUserUUID(textUserId)
+
       const { data, error } = await supabase
         .from('paper_insights')
         .insert([{
           paper_id,
-          user_id: user_id || 'default',
+          user_id: userId,
           insight,
           insight_type: insight_type || 'note',
           thought_type: thought_type || 'general',

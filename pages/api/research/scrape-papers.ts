@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next'
-import { supabase } from '../../../lib/supabase'
+import { getSupabase, isSupabaseAvailable } from '../../../lib/supabase'
 import * as cheerio from 'cheerio'
 
 interface Paper {
@@ -26,6 +26,16 @@ export default async function handler(
   }
 
   try {
+    // Check if database is available
+    if (!isSupabaseAvailable()) {
+      return res.status(500).json({
+        error: 'Database not available',
+        details: 'Database connection is not configured'
+      })
+    }
+
+    const supabase = getSupabase()
+    
     const { company } = req.body
 
     if (!company || !['openai', 'anthropic'].includes(company.toLowerCase())) {
@@ -162,7 +172,7 @@ function generateTags(text: string): string[] {
     }
   })
   
-  return [...new Set(tags)] // Remove duplicates
+  return Array.from(new Set(tags)) // Remove duplicates
 }
 
 // Enhanced scraping functions

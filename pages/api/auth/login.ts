@@ -1,7 +1,7 @@
 import { NextApiRequest, NextApiResponse } from 'next'
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
-import { supabase } from '../../../lib/supabase'
+import { getSupabase, isSupabaseAvailable } from '../../../lib/supabase'
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key'
 
@@ -26,6 +26,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
+    // 检查数据库是否可用
+    if (!isSupabaseAvailable()) {
+      return res.status(500).json({
+        error: 'Database not available',
+        details: 'Database connection is not configured'
+      })
+    }
+
+    const supabase = getSupabase()
+    
     // 查找用户
     const { data: user, error: userError } = await supabase
       .from('users')

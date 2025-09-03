@@ -1,13 +1,21 @@
 import { NextApiRequest, NextApiResponse } from 'next'
 import jwt from 'jsonwebtoken'
 import { loadDemoBookmarks } from '../../../lib/demoStorage'
-import { supabase } from '../../../lib/supabase'
+import { getSupabase, isSupabaseAvailable } from '../../../lib/supabase'
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key'
 
 // Helper function to load papers data from Supabase
 async function loadPapersData() {
   try {
+    // Check if database is available
+    if (!isSupabaseAvailable()) {
+      console.log('Database not available for papers data')
+      return []
+    }
+
+    const supabase = getSupabase()
+    
     if (supabase) {
       const { data, error } = await supabase
         .from('research_papers')
@@ -27,6 +35,14 @@ async function loadPapersData() {
 // Helper function to load resources data from Supabase
 async function loadResourcesData() {
   try {
+    // Check if database is available
+    if (!isSupabaseAvailable()) {
+      console.log('Database not available for resources data')
+      return []
+    }
+
+    const supabase = getSupabase()
+
     if (supabase) {
       // Try all resource tables and combine results
       const [userResourcesResult, jobResourcesResult, interviewResourcesResult] = await Promise.all([
@@ -64,6 +80,14 @@ async function loadResourcesData() {
 // Helper function to load jobs data from Supabase
 async function loadJobsData() {
   try {
+    // Check if database is available
+    if (!isSupabaseAvailable()) {
+      console.log('Database not available for jobs data')
+      return []
+    }
+
+    const supabase = getSupabase()
+
     if (supabase) {
       const { data, error } = await supabase
         .from('jobs')

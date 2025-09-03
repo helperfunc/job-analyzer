@@ -1,0 +1,56 @@
+{
+  "family": "job-analyzer",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "512",
+  "memory": "2048",
+  "containerDefinitions": [
+    {
+      "name": "job-analyzer",
+      "image": "job-analyzer",
+      "portMappings": [
+        {
+          "containerPort": 3000,
+          "protocol": "tcp"
+        }
+      ],
+      "essential": true,
+      "healthCheck": {
+        "command": ["CMD-SHELL", "curl -f http://localhost:3000/api/health || exit 1"],
+        "interval": 30,
+        "timeout": 5,
+        "retries": 3,
+        "startPeriod": 60
+      },
+      "environment": [
+        {
+          "name": "NODE_ENV",
+          "value": "production"
+        },
+        {
+          "name": "PORT",
+          "value": "3000"
+        },
+        {
+          "name": "DATABASE_URL",
+          "value": "dummy-for-testing"
+        },
+        {
+          "name": "JWT_SECRET",
+          "value": "dummy-jwt-secret-for-testing"
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/job-analyzer",
+          "awslogs-region": "us-east-1",
+          "awslogs-stream-prefix": "ecs",
+          "awslogs-create-group": "true"
+        }
+      }
+    }
+  ],
+  "executionRoleArn": "arn:aws:iam::076181803263:role/ecsTaskExecutionRole",
+  "taskRoleArn": "arn:aws:iam::076181803263:role/ecsTaskRole"
+}

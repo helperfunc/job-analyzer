@@ -84,7 +84,7 @@ CREATE INDEX idx_relations_paper_id ON job_paper_relations(paper_id);
 CREATE TABLE user_insights (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     job_id UUID NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
-    user_id TEXT NOT NULL,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     insight_type TEXT NOT NULL CHECK (insight_type IN ('note', 'resource', 'experience')),
     content TEXT NOT NULL,
     created_at TIMESTAMPTZ DEFAULT NOW(),
@@ -99,7 +99,7 @@ CREATE INDEX idx_insights_user_id ON user_insights(user_id);
 CREATE TABLE paper_insights (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     paper_id UUID NOT NULL REFERENCES research_papers(id) ON DELETE CASCADE,
-    user_id TEXT NOT NULL,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     insight TEXT NOT NULL,
     insight_type TEXT NOT NULL CHECK (insight_type IN ('note', 'analysis', 'relevance', 'application', 'other')),
     thought_type TEXT NOT NULL DEFAULT 'general', -- 'general', 'key_takeaway', 'application', 'critique'
@@ -119,7 +119,7 @@ CREATE INDEX idx_paper_insights_user_id ON paper_insights(user_id);
 CREATE TABLE job_thoughts (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     job_id UUID NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
-    user_id TEXT NOT NULL DEFAULT 'default',
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     thought_type TEXT NOT NULL DEFAULT 'general', -- 'general', 'pros', 'cons', 'questions', 'preparation'
     content TEXT NOT NULL,
     rating INTEGER CHECK (rating >= 1 AND rating <= 5), -- 1-5 star rating
@@ -137,6 +137,7 @@ CREATE INDEX idx_job_thoughts_user_id ON job_thoughts(user_id);
 CREATE TABLE interview_resources (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     job_id UUID NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     title TEXT NOT NULL,
     url TEXT,
     resource_type TEXT NOT NULL CHECK (resource_type IN ('preparation', 'question', 'experience', 'note', 'other')),
@@ -149,12 +150,13 @@ CREATE TABLE interview_resources (
 -- 为interview_resources表创建索引
 CREATE INDEX idx_interview_resources_job_id ON interview_resources(job_id);
 CREATE INDEX idx_interview_resources_type ON interview_resources(resource_type);
+CREATE INDEX idx_interview_resources_user_id ON interview_resources(user_id);
 
 -- 9. 创建job资源表
 CREATE TABLE job_resources (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     job_id UUID REFERENCES jobs(id) ON DELETE CASCADE,
-    user_id TEXT NOT NULL,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     title TEXT NOT NULL,
     url TEXT,
     description TEXT,
@@ -171,7 +173,7 @@ CREATE INDEX idx_resources_user_id ON job_resources(user_id);
 CREATE TABLE skill_gaps (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     job_id UUID NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
-    user_id TEXT NOT NULL,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     required_skills JSONB DEFAULT '{}'::jsonb,
     current_skills JSONB DEFAULT '{}'::jsonb,
     gap_analysis JSONB DEFAULT '{}'::jsonb,
@@ -204,7 +206,7 @@ CREATE INDEX idx_project_rec_difficulty ON project_recommendations(difficulty);
 -- 12. 创建用户收藏论文表
 CREATE TABLE user_saved_papers (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id TEXT NOT NULL,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     paper_id UUID NOT NULL REFERENCES research_papers(id) ON DELETE CASCADE,
     job_id UUID REFERENCES jobs(id) ON DELETE CASCADE,
     notes TEXT,
@@ -271,6 +273,9 @@ CREATE TRIGGER update_skill_gaps_updated_at
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_projects_updated_at 
     BEFORE UPDATE ON projects
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER update_resource_thoughts_updated_at 
+    BEFORE UPDATE ON resource_thoughts
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- 16. 创建一些有用的视图（可选）
@@ -403,6 +408,11 @@ COMMENT ON TABLE projects IS 'User-created projects for tracking job search prog
 COMMENT ON COLUMN projects.status IS 'Project status: planning, in_progress, completed, on_hold, cancelled';
 COMMENT ON COLUMN projects.priority IS 'Project priority: low, medium, high';
 COMMENT ON COLUMN projects.progress IS 'Project completion percentage (0-100)';
+COMMENT ON TABLE resource_thoughts IS 'Stores user thoughts and feedback on resources';
+COMMENT ON COLUMN resource_thoughts.thought_type IS 'Type of thought: general, pros, cons, questions, experience';
+COMMENT ON COLUMN resource_thoughts.rating IS 'User rating of the resource from 1-5 stars';
+COMMENT ON COLUMN resource_thoughts.is_helpful IS 'Whether the user found the resource helpful';
+COMMENT ON COLUMN resource_thoughts.visibility IS 'Visibility setting: public, private, or friends only';
 
 -- 添加新表注释
 COMMENT ON TABLE job_resource_relations IS 'Many-to-many relationship table linking job_resources to multiple jobs';
@@ -458,6 +468,24 @@ CREATE TABLE IF NOT EXISTS user_sessions (
 CREATE INDEX IF NOT EXISTS idx_sessions_token ON user_sessions(session_token);
 CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON user_sessions(user_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_expires ON user_sessions(expires_at);
+
+-- 21.5. 用户认证提供商映射表（支持OAuth等外部认证）
+CREATE TABLE IF NOT EXISTS user_auth_providers (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    provider VARCHAR(50) NOT NULL, -- 'google', 'github', 'local', 'demo' etc.
+    provider_user_id TEXT NOT NULL, -- The ID from the auth provider
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    
+    -- Ensure unique provider + provider_user_id combination
+    UNIQUE(provider, provider_user_id)
+);
+
+-- 为user_auth_providers表创建索引
+CREATE INDEX IF NOT EXISTS idx_user_auth_providers_user_id ON user_auth_providers(user_id);
+CREATE INDEX IF NOT EXISTS idx_user_auth_providers_provider ON user_auth_providers(provider);
+CREATE INDEX IF NOT EXISTS idx_user_auth_providers_provider_user_id ON user_auth_providers(provider_user_id);
 
 -- 22. 用户收藏表（工作和论文）
 CREATE TABLE IF NOT EXISTS user_bookmarks (
@@ -614,7 +642,7 @@ CREATE INDEX IF NOT EXISTS idx_follows_followed ON user_follows(followed_id);
 -- 27. 项目管理表
 CREATE TABLE IF NOT EXISTS projects (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id TEXT NOT NULL DEFAULT 'default',
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     title TEXT NOT NULL,
     description TEXT,
     status VARCHAR(20) NOT NULL DEFAULT 'planning' CHECK (status IN ('planning', 'in_progress', 'completed', 'on_hold', 'cancelled')),
@@ -639,7 +667,27 @@ CREATE INDEX IF NOT EXISTS idx_projects_priority ON projects(priority);
 CREATE INDEX IF NOT EXISTS idx_projects_category ON projects(category);
 CREATE INDEX IF NOT EXISTS idx_projects_created_at ON projects(created_at DESC);
 
--- 28. 用户通知系统
+-- 28. 资源评论表
+CREATE TABLE IF NOT EXISTS resource_thoughts (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    resource_id UUID NOT NULL,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    username TEXT,
+    thought_type TEXT NOT NULL DEFAULT 'general' CHECK (thought_type IN ('general', 'pros', 'cons', 'questions', 'experience')),
+    content TEXT NOT NULL,
+    rating INTEGER CHECK (rating >= 1 AND rating <= 5),
+    is_helpful BOOLEAN DEFAULT true,
+    visibility VARCHAR(10) NOT NULL DEFAULT 'public' CHECK (visibility IN ('public', 'private', 'friends')),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 为resource_thoughts表创建索引
+CREATE INDEX IF NOT EXISTS idx_resource_thoughts_resource_id ON resource_thoughts(resource_id);
+CREATE INDEX IF NOT EXISTS idx_resource_thoughts_user_id ON resource_thoughts(user_id);
+CREATE INDEX IF NOT EXISTS idx_resource_thoughts_created_at ON resource_thoughts(created_at DESC);
+
+-- 29. 用户通知系统
 CREATE TABLE IF NOT EXISTS notifications (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -805,6 +853,28 @@ GRANT ALL ON notifications TO authenticated;
 -- ALTER TABLE user_follows ENABLE ROW LEVEL SECURITY;
 -- ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
 
+-- =============================================
+-- 初始化数据
+-- =============================================
+
+-- 插入demo用户
+INSERT INTO users (id, username, email, password_hash, display_name, is_verified)
+VALUES (
+    '00000000-0000-0000-0000-000000000001'::uuid,
+    'demo_user',
+    'demo@example.com',
+    'no_password_oauth_user',
+    'Demo User',
+    true
+) ON CONFLICT (id) DO NOTHING;
+
+-- 映射demo用户的认证提供商
+INSERT INTO user_auth_providers (user_id, provider, provider_user_id)
+VALUES 
+    ('00000000-0000-0000-0000-000000000001'::uuid, 'demo', 'demo-user'),
+    ('00000000-0000-0000-0000-000000000001'::uuid, 'demo', 'default')
+ON CONFLICT (provider, provider_user_id) DO NOTHING;
+
 -- 结束
 -- 运行此脚本将创建完整的数据库结构，包括：
 -- - 所有核心表：jobs, research_papers, job_paper_relations
@@ -814,7 +884,9 @@ GRANT ALL ON notifications TO authenticated;
 -- - AI功能表：skill_gaps, project_recommendations
 -- - 用户功能表：user_saved_papers
 -- - 用户系统表：users, user_sessions, user_bookmarks, user_resources, comments, votes, user_follows, notifications
+-- - 用户认证映射表：user_auth_providers (支持OAuth等外部认证)
 -- - job_thoughts表：职位个人想法和评分
 -- - 增强的paper_insights表：论文个人见解和多维评分
 -- - 技能差距分析和项目推荐系统
 -- - 资源共享功能：允许一个资源链接到多个职位
+-- - UUID作为用户ID的行业标准实现

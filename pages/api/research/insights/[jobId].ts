@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next'
-import { supabase } from '../../../../lib/supabase'
+import { getSupabase, isSupabaseAvailable } from '../../../../lib/supabase'
 
 // Empty mock data fallback
 const mockInsights: any[] = []
@@ -18,7 +18,7 @@ export default async function handler(
   }
 
   if (req.method === 'GET') {
-    if (!supabase) {
+    if (!isSupabaseAvailable()) {
       // Return mock data when database is not configured
       const { user_id } = req.query
       let filteredInsights = mockInsights.filter(i => i.job_id === jobId)
@@ -35,6 +35,7 @@ export default async function handler(
     
     try {
       const { user_id } = req.query
+      const supabase = getSupabase()
       
       let query = supabase
         .from('user_insights')

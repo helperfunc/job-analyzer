@@ -1,6 +1,6 @@
 import { NextApiRequest, NextApiResponse } from 'next'
 import { authenticateUser, optionalAuth, AuthenticatedRequest } from '../../../lib/auth'
-import { supabase } from '../../../lib/supabase'
+import { getSupabase, isSupabaseAvailable } from '../../../lib/supabase'
 
 interface CommentRequest {
   target_type: 'job' | 'paper' | 'resource' | 'user_resource'
@@ -31,6 +31,16 @@ export default optionalAuth(async function handler(
 
 async function getComments(req: AuthenticatedRequest, res: NextApiResponse) {
   try {
+    // Check if database is available
+    if (!isSupabaseAvailable()) {
+      return res.status(500).json({
+        error: 'Database not available',
+        details: 'Database connection is not configured'
+      })
+    }
+
+    const supabase = getSupabase()
+    
     const { 
       target_type,
       job_id,
@@ -92,8 +102,8 @@ async function getComments(req: AuthenticatedRequest, res: NextApiResponse) {
     }
 
     // 分页和排序
-    const limitNum = parseInt(limit)
-    const offsetNum = parseInt(offset)
+    const limitNum = parseInt(Array.isArray(limit) ? limit[0] : limit)
+    const offsetNum = parseInt(Array.isArray(offset) ? offset[0] : offset)
     query = query
       .order('created_at', { ascending: true })
       .range(offsetNum, offsetNum + limitNum - 1)
@@ -111,7 +121,7 @@ async function getComments(req: AuthenticatedRequest, res: NextApiResponse) {
     // 获取评论的回复（如果请求的是顶级评论）
     if (parent_only === 'true' && comments) {
       for (const comment of comments) {
-        const { data: replies } = await supabase
+        const repliesResult = await supabase
           .from('comments')
           .select(`
             id,
@@ -130,9 +140,9 @@ async function getComments(req: AuthenticatedRequest, res: NextApiResponse) {
           `)
           .eq('parent_comment_id', comment.id)
           .eq('is_deleted', false)
-          .order('created_at', { ascending: true })
+          .order('created_at', { ascending: true });
 
-        comment.replies = replies || []
+        (comment as any).replies = repliesResult.data || []
       }
     }
 
@@ -157,6 +167,16 @@ async function createComment(
   userId: string
 ) {
   try {
+    // Check if database is available
+    if (!isSupabaseAvailable()) {
+      return res.status(500).json({
+        error: 'Database not available',
+        details: 'Database connection is not configured'
+      })
+    }
+
+    const supabase = getSupabase()
+    
     const commentData: CommentRequest = req.body
 
     if (!commentData.target_type || !commentData.content) {

@@ -1,0 +1,56 @@
+{
+  "family": "job-analyzer",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "512",
+  "memory": "2048",
+  "containerDefinitions": [
+    {
+      "name": "job-analyzer",
+      "image": "076181803263.dkr.ecr.us-east-1.amazonaws.com/job-analyzer:latest",
+      "portMappings": [
+        {
+          "containerPort": 3000,
+          "protocol": "tcp"
+        }
+      ],
+      "essential": true,
+      "environment": [
+        {
+          "name": "NODE_ENV",
+          "value": "production"
+        },
+        {
+          "name": "PORT",
+          "value": "3000"
+        },
+        {
+          "name": "DATABASE_URL",
+          "value": "postgresql://dummy:dummy@dummy:5432/dummy"
+        },
+        {
+          "name": "JWT_SECRET",
+          "value": "dummy-jwt-secret-for-testing"
+        },
+        {
+          "name": "GOOGLE_CLIENT_ID",
+          "value": "dummy-client-id"
+        },
+        {
+          "name": "GOOGLE_CLIENT_SECRET",
+          "value": "dummy-client-secret"
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/job-analyzer",
+          "awslogs-region": "us-east-1",
+          "awslogs-stream-prefix": "ecs",
+          "awslogs-create-group": "true"
+        }
+      }
+    }
+  ],
+  "executionRoleArn": "arn:aws:iam::076181803263:role/ecsTaskExecutionRole"
+}

@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next'
-import { supabase } from '../../lib/supabase'
+import { getSupabase, isSupabaseAvailable } from '../../lib/supabase'
 
 interface Job {
   title: string
@@ -21,6 +21,16 @@ export default async function handler(
   }
 
   try {
+    // Check if database is available
+    if (!isSupabaseAvailable()) {
+      return res.status(500).json({
+        error: 'Database not available',
+        details: 'Database connection is not configured'
+      })
+    }
+
+    const supabase = getSupabase()
+    
     // Get company parameter from query
     const { company } = req.query
     const companyFilter = company ? company.toString().toLowerCase() : 'openai'
@@ -30,7 +40,7 @@ export default async function handler(
     console.log(`📊 Getting summary for company: ${companyFilter}`)
     
     // Check if database is configured
-    if (!supabase) {
+    if (!isSupabaseAvailable()) {
       return res.status(503).json({ 
         error: 'Database not configured',
         message: 'Please configure database connection'

@@ -1,6 +1,6 @@
 import { NextApiRequest, NextApiResponse } from 'next'
 import jwt from 'jsonwebtoken'
-import { supabase, isSupabaseAvailable } from '../../../lib/supabase'
+import { getSupabase, isSupabaseAvailable } from '../../../lib/supabase'
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key'
 
@@ -57,8 +57,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       })
     }
 
+    // 检查数据库是否可用
+    if (!isSupabaseAvailable()) {
+      return res.status(500).json({
+        error: 'Database not configured',
+        details: 'Please configure database connection'
+      })
+    }
+
+    const supabase = getSupabase()
+
     // 检查用户是否已存在
-    let { data: existingUser, error: findError } = await supabase!
+    let { data: existingUser, error: findError } = await supabase
       .from('users')
       .select('*')
       .eq('email', email)
@@ -120,7 +130,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // 如果用户不存在，创建新用户
     if (!user) {
-      const { data: newUser, error: createError } = await supabase
+      const { data: newUser, error: createError } = await supabase!
         .from('users')
         .insert([{
           username: email.split('@')[0] + '_' + Date.now(),
@@ -210,8 +220,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // 创建会话记录（如果表存在）
     try {
+      const supabase = getSupabase()
       const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
-      await supabase
+      await supabase!
         .from('user_sessions')
         .insert([{
           user_id: user.id,

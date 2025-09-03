@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next'
-import { supabase } from '../../../lib/supabase'
+import { getSupabase, isSupabaseAvailable } from '../../../lib/supabase'
 import jwt from 'jsonwebtoken'
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key'
@@ -29,7 +29,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   if (req.method === 'GET') {
     try {
-      if (!supabase) {
+    // Check if database is available
+    if (!isSupabaseAvailable()) {
+      return res.status(500).json({
+        error: 'Database not available',
+        details: 'Database connection is not configured'
+      })
+    }
+
+    const supabase = getSupabase()
+    
+      if (!isSupabaseAvailable()) {
         return res.status(503).json({
           success: false,
           error: 'Database not configured'
@@ -85,12 +95,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         })
       }
 
-      if (!supabase) {
+      if (!isSupabaseAvailable()) {
         return res.status(503).json({
           success: false,
           error: 'Database not configured'
         })
       }
+
+      const supabase = getSupabase()
 
       // Insert into database
       const { data: newProject, error } = await supabase

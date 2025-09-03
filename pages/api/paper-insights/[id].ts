@@ -1,11 +1,11 @@
 import { NextApiRequest, NextApiResponse } from 'next'
-import { supabase } from '../../../lib/supabase'
+import { getSupabase, isSupabaseAvailable } from '../../../lib/supabase'
 
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
-  if (!supabase) {
+  if (!isSupabaseAvailable()) {
     return res.status(503).json({
       success: false,
       error: 'Database not configured'
@@ -23,6 +23,16 @@ export default async function handler(
 
   if (req.method === 'PUT') {
     try {
+    // Check if database is available
+    if (!isSupabaseAvailable()) {
+      return res.status(500).json({
+        error: 'Database not available',
+        details: 'Database connection is not configured'
+      })
+    }
+
+    const supabase = getSupabase()
+    
       const { 
         insight, 
         insight_type,
@@ -65,6 +75,7 @@ export default async function handler(
     }
   } else if (req.method === 'DELETE') {
     try {
+      const supabase = getSupabase()
       const { error } = await supabase
         .from('paper_insights')
         .delete()

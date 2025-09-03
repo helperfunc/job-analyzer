@@ -1,44 +1,34 @@
 import { NextApiRequest, NextApiResponse } from 'next'
-import { supabase } from '../../../lib/supabase'
-import jwt from 'jsonwebtoken'
-
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key'
-
-// Use global variable to share data between endpoints
-declare global {
-  var demoThoughts: any[]
-}
-
-// Initialize if not exists
-if (!global.demoThoughts) {
-  global.demoThoughts = []
-}
+import { getSupabase, isSupabaseAvailable } from '../../../lib/supabase'
+import { getCurrentUser } from '../../../lib/auth'
+import { getUserUUID } from '../../../lib/auth-helpers'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  // Get token from cookie or Authorization header
-  let token = req.cookies.token
-  if (!token) {
-    const authHeader = req.headers.authorization
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-      token = authHeader.substring(7)
-    }
-  }
+  // Get current user
+  const user = await getCurrentUser(req)
+  const textUserId = user ? user.userId : 'default'
+  const userId = await getUserUUID(textUserId)
+  const username = user ? (user.username || user.email?.split('@')[0] || 'User') : 'Guest'
 
-  let userId = 'demo-user'
-  let username = 'Demo User'
-  
-  if (token) {
-    try {
-      const decoded = jwt.verify(token, JWT_SECRET) as any
-      userId = decoded.userId || 'demo-user'
-      username = decoded.email?.split('@')[0] || decoded.username || 'Demo User'
-    } catch (error) {
-      console.log('Token verification failed, using demo mode')
-    }
+  if (!isSupabaseAvailable()) {
+    return res.status(503).json({
+      success: false,
+      error: 'Database not configured'
+    })
   }
 
   if (req.method === 'GET') {
     try {
+    // Check if database is available
+    if (!isSupabaseAvailable()) {
+      return res.status(500).json({
+        error: 'Database not available',
+        details: 'Database connection is not configured'
+      })
+    }
+
+    const supabase = getSupabase()
+    
       const { resource_id } = req.query
 
       if (!resource_id) {
@@ -48,18 +38,25 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         })
       }
 
-      // For demo mode, return filtered thoughts
-      const filteredThoughts = global.demoThoughts
-        .filter(t => t.resource_id === resource_id)
-        .map(t => ({
-          ...t,
-          canEdit: t.user_id === userId,
-          canDelete: t.user_id === userId
-        }))
+      // Get thoughts from database
+      const { data: thoughts, error } = await supabase
+        .from('resource_thoughts')
+        .select('*')
+        .eq('resource_id', resource_id)
+        .order('created_at', { ascending: false })
+
+      if (error) throw error
+
+      // Add permissions for each thought
+      const thoughtsWithPermissions = (thoughts || []).map(t => ({
+        ...t,
+        canEdit: t.user_id === userId,
+        canDelete: t.user_id === userId
+      }))
 
       return res.status(200).json({
         success: true,
-        data: filteredThoughts
+        data: thoughtsWithPermissions
       })
 
     } catch (error) {
@@ -80,21 +77,23 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         })
       }
 
-      const newThought = {
-        id: `thought-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-        resource_id,
-        user_id: userId,
-        username,
-        thought_type: thought_type || 'general',
-        content,
-        rating: rating || null,
-        is_helpful: is_helpful !== false,
-        visibility: visibility || 'public',
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      }
+      const supabase = getSupabase()
+      const { data: newThought, error } = await supabase
+        .from('resource_thoughts')
+        .insert([{
+          resource_id,
+          user_id: userId,
+          username,
+          thought_type: thought_type || 'general',
+          content,
+          rating: rating || null,
+          is_helpful: is_helpful !== false,
+          visibility: visibility || 'public'
+        }])
+        .select()
+        .single()
 
-      global.demoThoughts.push(newThought)
+      if (error) throw error
 
       return res.status(201).json({
         success: true,

@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next'
-import { supabase } from '../../../lib/supabase'
+import { getSupabase, isSupabaseAvailable } from '../../../lib/supabase'
 
 export default async function handler(
   req: NextApiRequest,
@@ -13,6 +13,16 @@ export default async function handler(
   }
 
   try {
+    // Check if database is available
+    if (!isSupabaseAvailable()) {
+      return res.status(500).json({
+        error: 'Database not available',
+        details: 'Database connection is not configured'
+      })
+    }
+
+    const supabase = getSupabase()
+    
     const { paperId } = req.query
 
     if (!paperId) {
@@ -23,7 +33,7 @@ export default async function handler(
     }
 
     // Check if Supabase is configured
-    if (!supabase) {
+    if (!isSupabaseAvailable()) {
       return res.status(200).json({
         success: true,
         data: []
@@ -48,6 +58,8 @@ export default async function handler(
       `)
       .eq('paper_id', paperId)
 
+    let relatedJobs: any[] = []
+
     // If foreign key relationship fails, try alternative approach
     if (error && error.code === 'PGRST200') {
       console.log('Foreign key relationship not found, using alternative approach...')
@@ -70,19 +82,15 @@ export default async function handler(
 
         if (jobsError) throw jobsError
 
-        // Format the data to match expected structure
-        data = jobsData || []
-      } else {
-        data = []
+        // Use job objects directly
+        relatedJobs = jobsData || []
       }
     } else if (error) {
       throw error
     } else {
       // Extract jobs from the relation data (normal case)
-      data = data?.map(relation => relation.jobs).filter(Boolean) || []
+      relatedJobs = data?.map(relation => relation.jobs).filter(Boolean) || []
     }
-
-    const relatedJobs = data || []
 
     res.status(200).json({
       success: true,

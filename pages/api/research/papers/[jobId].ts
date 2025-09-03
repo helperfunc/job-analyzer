@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next'
-import { supabase } from '../../../../lib/supabase'
+import { getSupabase, isSupabaseAvailable } from '../../../../lib/supabase'
 
 export default async function handler(
   req: NextApiRequest,
@@ -16,6 +16,15 @@ export default async function handler(
 
   if (req.method === 'GET') {
     try {
+      if (!isSupabaseAvailable()) {
+        return res.status(200).json({
+          success: true,
+          data: []
+        })
+      }
+
+      const supabase = getSupabase()
+      
       // Get papers related to the position
       const { data, error } = await supabase
         .from('job_paper_relations')

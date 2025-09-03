@@ -849,8 +849,8 @@ export default function JobsPage() {
   })
 
   // Get unique values for filters
-  const companies = [...new Set(jobs.map(job => job.company))]
-  const departments = [...new Set(jobs.map(job => job.department).filter(Boolean))]
+  const companies = Array.from(new Set(jobs.map(job => job.company)))
+  const departments = Array.from(new Set(jobs.map(job => job.department).filter(Boolean)))
 
   // Pagination
   const totalPages = Math.ceil(sortedJobs.length / jobsPerPage)

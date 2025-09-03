@@ -1,5 +1,6 @@
 import { NextApiRequest, NextApiResponse } from 'next'
 import { createClient } from '@supabase/supabase-js'
+import { getSupabase, isSupabaseAvailable } from '../../../lib/supabase'
 
 export default async function handler(
   req: NextApiRequest,

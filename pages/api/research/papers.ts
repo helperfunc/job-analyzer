@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next'
-import { supabase } from '../../../lib/supabase'
+import { getSupabase, isSupabaseAvailable } from '../../../lib/supabase'
 import { optionalAuth, AuthenticatedRequest } from '../../../lib/auth'
 
 // Empty mock data fallback
@@ -10,7 +10,7 @@ export default optionalAuth(async function handler(
   res: NextApiResponse
 ) {
   // Check if Supabase is configured
-  if (!supabase) {
+  if (!isSupabaseAvailable()) {
     // Return mock data when database is not configured
     const { company } = req.query
     let filteredPapers = mockPapers
@@ -29,6 +29,16 @@ export default optionalAuth(async function handler(
 
   if (req.method === 'GET') {
     try {
+    // Check if database is available
+    if (!isSupabaseAvailable()) {
+      return res.status(500).json({
+        error: 'Database not available',
+        details: 'Database connection is not configured'
+      })
+    }
+
+    const supabase = getSupabase()
+    
       const { company, limit = 100, offset = 0 } = req.query
 
       // Get total count first
@@ -144,7 +154,7 @@ export default optionalAuth(async function handler(
       })
     }
   } else if (req.method === 'POST') {
-    if (!supabase) {
+    if (!isSupabaseAvailable()) {
       return res.status(503).json({
         success: false,
         error: 'Database not configured'
@@ -161,6 +171,7 @@ export default optionalAuth(async function handler(
         })
       }
 
+      const supabase = getSupabase()
       const { data, error } = await supabase
         .from('research_papers')
         .insert([{
@@ -202,13 +213,14 @@ export default optionalAuth(async function handler(
         })
       }
 
-      if (!supabase) {
+      if (!isSupabaseAvailable()) {
         return res.status(503).json({
           success: false,
           error: 'Database not configured'
         })
       }
 
+      const supabase = getSupabase()
       const { error } = await supabase
         .from('research_papers')
         .delete()

@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: http://job-analyzer-alb-38879773.us-east-1.elb.amazonaws.com/sitemap.xml

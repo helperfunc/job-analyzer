@@ -1,5 +1,7 @@
 import { NextApiRequest, NextApiResponse } from 'next'
 import jwt from 'jsonwebtoken'
+import { getSupabase, isSupabaseAvailable } from '../../../lib/supabase'
+import { getUserUUID } from '../../../lib/auth-helpers'
 import { loadDemoBookmarks, loadDemoVotes } from '../../../lib/demoStorage'
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key'
@@ -10,6 +12,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
+    // Check if database is available
+    if (!isSupabaseAvailable()) {
+      return res.status(500).json({
+        error: 'Database not available',
+        details: 'Database connection is not configured'
+      })
+    }
+
+    const supabase = getSupabase()
+    
     // Get token from cookie or Authorization header
     let token = req.cookies.token
     
@@ -49,12 +61,72 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
                (decoded.email && v.user_id === btoa(decoded.email).replace(/[^a-zA-Z0-9]/g, ''))
       })
       
-      // Calculate stats
-      const stats = {
+      // Calculate stats from database if available
+      let stats = {
         bookmarks: userBookmarks.length,
-        comments: 0, // TODO: implement when comments system is added
-        resources: 0, // TODO: implement when resources system is added
+        comments: 0,
+        resources: 0,
         publicResources: 0
+      }
+
+      if (supabase) {
+        try {
+          // Get user UUID for database queries
+          const userUuid = await getUserUUID(userId)
+          
+          // Get user resources count
+          const { count: resourcesCount } = await supabase
+            .from('user_resources')
+            .select('*', { count: 'exact', head: true })
+            .eq('user_id', userUuid)
+
+          const { count: publicResourcesCount } = await supabase
+            .from('user_resources')
+            .select('*', { count: 'exact', head: true })
+            .eq('user_id', userUuid)
+            .eq('visibility', 'public')
+
+          // Get comments count (job thoughts + paper insights + resource thoughts)
+          const { count: jobThoughtsCount } = await supabase
+            .from('job_thoughts')
+            .select('*', { count: 'exact', head: true })
+            .eq('user_id', userUuid)
+
+          const { count: paperInsightsCount } = await supabase
+            .from('paper_insights')
+            .select('*', { count: 'exact', head: true })
+            .eq('user_id', userUuid)
+
+          const { count: resourceThoughtsCount } = await supabase
+            .from('resource_thoughts')
+            .select('*', { count: 'exact', head: true })
+            .eq('user_id', userUuid)
+
+          // Get bookmarks from database
+          const { count: dbBookmarksCount } = await supabase
+            .from('user_bookmarks')
+            .select('*', { count: 'exact', head: true })
+            .eq('user_id', userUuid)
+
+          stats = {
+            bookmarks: dbBookmarksCount || userBookmarks.length,
+            comments: (jobThoughtsCount || 0) + (paperInsightsCount || 0) + (resourceThoughtsCount || 0),
+            resources: resourcesCount || 0,
+            publicResources: publicResourcesCount || 0
+          }
+          
+          console.log('User stats:', {
+            userId,
+            userUuid,
+            jobThoughtsCount,
+            paperInsightsCount,
+            resourceThoughtsCount,
+            totalComments: stats.comments
+          })
+        } catch (dbError) {
+          console.error('Failed to fetch stats from database:', dbError)
+          // Continue with file-based stats
+        }
       }
       
       // Return user info from token with stats

@@ -1,6 +1,6 @@
 import { NextApiRequest, NextApiResponse } from 'next'
 import { authenticateUser, AuthenticatedRequest } from '../../../lib/auth'
-import { supabase } from '../../../lib/supabase'
+import { getSupabase, isSupabaseAvailable } from '../../../lib/supabase'
 
 interface BookmarkRequest {
   bookmark_type: 'job' | 'paper' | 'resource'
@@ -38,6 +38,16 @@ async function getBookmarks(
   userId: string
 ) {
   try {
+    // Check if database is available
+    if (!isSupabaseAvailable()) {
+      return res.status(500).json({
+        error: 'Database not available',
+        details: 'Database connection is not configured'
+      })
+    }
+
+    const supabase = getSupabase()
+    
     const { type, limit, offset } = req.query
     
     let query = supabase
@@ -79,12 +89,17 @@ async function getBookmarks(
       query = query.eq('bookmark_type', type)
     }
 
-    if (limit && typeof limit === 'string') {
-      query = query.limit(parseInt(limit))
+    if (limit) {
+      const limitValue = Array.isArray(limit) ? limit[0] : limit
+      query = query.limit(parseInt(limitValue))
     }
 
-    if (offset && typeof offset === 'string') {
-      query = query.range(parseInt(offset), parseInt(offset) + (parseInt(limit as string) || 20) - 1)
+    if (offset) {
+      const offsetValue = Array.isArray(offset) ? offset[0] : offset
+      const limitValue = Array.isArray(limit) ? limit[0] : limit
+      const offsetNum = parseInt(offsetValue)
+      const limitNum = parseInt(limitValue || '20')
+      query = query.range(offsetNum, offsetNum + limitNum - 1)
     }
 
     const { data: bookmarks, error } = await query
@@ -100,28 +115,29 @@ async function getBookmarks(
     // 获取resource详情（如果有resource bookmarks）
     const resourceBookmarks = bookmarks?.filter(b => b.bookmark_type === 'resource' && b.resource_id) || []
     
-    for (const bookmark of resourceBookmarks) {
+    for (let i = 0; i < resourceBookmarks.length; i++) {
+      const bookmark = resourceBookmarks[i]
       if (bookmark.resource_type === 'job_resource') {
-        const { data: resource } = await supabase
+        const result = await supabase
           .from('job_resources')
           .select('id, title, description, url, resource_type, created_at')
           .eq('id', bookmark.resource_id)
           .single()
-        bookmark.resource_details = resource
+        ;(bookmark as any).resource_details = result.data
       } else if (bookmark.resource_type === 'interview_resource') {
-        const { data: resource } = await supabase
+        const result2 = await supabase
           .from('interview_resources')
           .select('id, title, content, url, resource_type, created_at')
           .eq('id', bookmark.resource_id)
           .single()
-        bookmark.resource_details = resource
+        ;(bookmark as any).resource_details = result2.data
       } else if (bookmark.resource_type === 'user_resource') {
-        const { data: resource } = await supabase
+        const result3 = await supabase
           .from('user_resources')
           .select('id, title, description, url, resource_type, visibility, created_at')
           .eq('id', bookmark.resource_id)
           .single()
-        bookmark.resource_details = resource
+        ;(bookmark as any).resource_details = result3.data
       }
     }
 
@@ -165,6 +181,14 @@ async function addBookmark(
     if (bookmarkData.bookmark_type === 'resource' && (!bookmarkData.resource_id || !bookmarkData.resource_type)) {
       return res.status(400).json({ error: 'resource_id and resource_type are required for resource bookmarks' })
     }
+
+    if (!isSupabaseAvailable()) {
+      return res.status(503).json({
+        error: 'Database not configured'
+      })
+    }
+
+    const supabase = getSupabase()
 
     // 检查是否已经收藏
     let existingQuery = supabase
@@ -244,6 +268,14 @@ async function updateBookmark(
       return res.status(400).json({ error: 'bookmark_id is required' })
     }
 
+    if (!isSupabaseAvailable()) {
+      return res.status(503).json({
+        error: 'Database not configured'
+      })
+    }
+
+    const supabase = getSupabase()
+
     const { data: bookmark, error } = await supabase
       .from('user_bookmarks')
       .update({
@@ -294,6 +326,14 @@ async function removeBookmark(
     if (!bookmark_id || typeof bookmark_id !== 'string') {
       return res.status(400).json({ error: 'bookmark_id is required' })
     }
+
+    if (!isSupabaseAvailable()) {
+      return res.status(503).json({
+        error: 'Database not configured'
+      })
+    }
+
+    const supabase = getSupabase()
 
     const { error } = await supabase
       .from('user_bookmarks')

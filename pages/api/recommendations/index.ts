@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next'
-import { supabase } from '../../../lib/supabase'
+import { getSupabase, isSupabaseAvailable } from '../../../lib/supabase'
 import { authenticateUser, AuthenticatedRequest } from '../../../lib/auth'
 
 interface RecommendationScore {
@@ -23,7 +23,15 @@ export default authenticateUser(async function handler(
   const { type = 'all', limit = 10 } = req.query
 
   try {
-    const recommendations = await generateRecommendations(user.userId, type as string, parseInt(limit as string))
+    if (!isSupabaseAvailable()) {
+      return res.status(503).json({
+        success: false,
+        error: 'Database not configured'
+      })
+    }
+
+    const supabase = getSupabase()
+    const recommendations = await generateRecommendations(user.userId, type as string, parseInt(limit as string), supabase)
 
     return res.status(200).json({
       success: true,
@@ -45,33 +53,34 @@ export default authenticateUser(async function handler(
 async function generateRecommendations(
   userId: string, 
   type: string, 
-  limit: number
+  limit: number,
+  supabase: any
 ): Promise<RecommendationScore[]> {
   const recommendations: RecommendationScore[] = []
 
   // 获取用户的行为数据
   const [userBookmarks, userVotes] = await Promise.all([
-    getUserBookmarks(userId),
-    getUserVotes(userId)
+    getUserBookmarks(userId, supabase),
+    getUserVotes(userId, supabase)
   ])
 
   if (type === 'all' || type === 'job') {
-    const jobRecs = await generateJobRecommendations(userId, userBookmarks, userVotes)
+    const jobRecs = await generateJobRecommendations(userId, userBookmarks, userVotes, supabase)
     recommendations.push(...jobRecs)
   }
 
   if (type === 'all' || type === 'paper') {
-    const paperRecs = await generatePaperRecommendations(userId, userBookmarks, userVotes)
+    const paperRecs = await generatePaperRecommendations(userId, userBookmarks, userVotes, supabase)
     recommendations.push(...paperRecs)
   }
 
   if (type === 'all' || type === 'resource') {
-    const resourceRecs = await generateResourceRecommendations(userId, userBookmarks, userVotes)
+    const resourceRecs = await generateResourceRecommendations(userId, userBookmarks, userVotes, supabase)
     recommendations.push(...resourceRecs)
   }
 
   if (type === 'all' || type === 'user') {
-    const userRecs = await generateUserRecommendations(userId, userBookmarks, userVotes)
+    const userRecs = await generateUserRecommendations(userId, userBookmarks, userVotes, supabase)
     recommendations.push(...userRecs)
   }
 
@@ -81,7 +90,7 @@ async function generateRecommendations(
     .slice(0, limit)
 }
 
-async function getUserBookmarks(userId: string) {
+async function getUserBookmarks(userId: string, supabase: any) {
   const { data: bookmarks } = await supabase
     .from('user_bookmarks')
     .select(`
@@ -97,7 +106,7 @@ async function getUserBookmarks(userId: string) {
   return bookmarks || []
 }
 
-async function getUserVotes(userId: string) {
+async function getUserVotes(userId: string, supabase: any) {
   const { data: votes } = await supabase
     .from('votes')
     .select(`
@@ -118,7 +127,8 @@ async function getUserVotes(userId: string) {
 async function generateJobRecommendations(
   userId: string,
   userBookmarks: any[],
-  userVotes: any[]
+  userVotes: any[],
+  supabase: any
 ): Promise<RecommendationScore[]> {
   const recommendations: RecommendationScore[] = []
 
@@ -127,7 +137,7 @@ async function generateJobRecommendations(
   const interestedSkills = new Set<string>()
 
   // Process bookmarks
-  userBookmarks.forEach(item => {
+  userBookmarks.forEach((item: any) => {
     if (item.jobs) {
       if (item.jobs.company) interestedCompanies.add(item.jobs.company.toLowerCase())
       if (item.jobs.skills) {
@@ -137,7 +147,7 @@ async function generateJobRecommendations(
   })
   
   // Process votes
-  userVotes.forEach(item => {
+  userVotes.forEach((item: any) => {
     if (item.jobs) {
       if (item.jobs.company) interestedCompanies.add(item.jobs.company.toLowerCase())
       if (item.jobs.skills) {
@@ -159,7 +169,7 @@ async function generateJobRecommendations(
     .not('id', 'in', `(${Array.from(interactedJobIds).join(',')})`)
     .limit(50)
 
-  jobs?.forEach(job => {
+  jobs?.forEach((job: any) => {
     let score = 0
     const reasons: string[] = []
 
@@ -204,7 +214,8 @@ async function generateJobRecommendations(
 async function generatePaperRecommendations(
   userId: string,
   userBookmarks: any[],
-  userVotes: any[]
+  userVotes: any[],
+  supabase: any
 ): Promise<RecommendationScore[]> {
   const recommendations: RecommendationScore[] = []
 
@@ -213,7 +224,7 @@ async function generatePaperRecommendations(
   const interestedTags = new Set<string>()
 
   // Process bookmarks
-  userBookmarks.forEach(item => {
+  userBookmarks.forEach((item: any) => {
     if (item.research_papers) {
       if (item.research_papers.company) interestedCompanies.add(item.research_papers.company.toLowerCase())
       if (item.research_papers.tags) {
@@ -226,7 +237,7 @@ async function generatePaperRecommendations(
   })
   
   // Process votes
-  userVotes.forEach(item => {
+  userVotes.forEach((item: any) => {
     if (item.research_papers) {
       if (item.research_papers.company) interestedCompanies.add(item.research_papers.company.toLowerCase())
       if (item.research_papers.tags) {
@@ -251,7 +262,7 @@ async function generatePaperRecommendations(
     .not('id', 'in', `(${Array.from(interactedPaperIds).join(',')})`)
     .limit(50)
 
-  papers?.forEach(paper => {
+  papers?.forEach((paper: any) => {
     let score = 0
     const reasons: string[] = []
 
@@ -298,7 +309,8 @@ async function generatePaperRecommendations(
 async function generateResourceRecommendations(
   userId: string,
   userBookmarks: any[],
-  userVotes: any[]
+  userVotes: any[],
+  supabase: any
 ): Promise<RecommendationScore[]> {
   // 基于用户资源的简单推荐
   // 可以扩展为基于用户兴趣的资源推荐
@@ -308,7 +320,8 @@ async function generateResourceRecommendations(
 async function generateUserRecommendations(
   userId: string,
   userBookmarks: any[],
-  userVotes: any[]
+  userVotes: any[],
+  supabase: any
 ): Promise<RecommendationScore[]> {
   const recommendations: RecommendationScore[] = []
 

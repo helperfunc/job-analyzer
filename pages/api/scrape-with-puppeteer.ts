@@ -2,7 +2,7 @@ import { NextApiRequest, NextApiResponse } from 'next'
 import * as cheerio from 'cheerio'
 import puppeteer from 'puppeteer'
 import chromium from '@sparticuz/chromium'
-import { supabase } from '../../lib/supabase'
+import { getSupabase, isSupabaseAvailable } from '../../lib/supabase'
 
 interface Job {
   title: string
@@ -191,6 +191,16 @@ export default async function handler(
   })
   
   try {
+    // Check if database is available
+    if (!isSupabaseAvailable()) {
+      return res.status(500).json({
+        error: 'Database not available',
+        details: 'Database connection is not configured'
+      })
+    }
+
+    const supabase = getSupabase()
+    
     // Start scraping asynchronously and return immediately
     const scrapingLogic = async () => {
       
@@ -391,7 +401,7 @@ export default async function handler(
       }
       
       // Look for JSON data in script tags
-      const jsonMatches = html.match(/<script[^>]*>(.*?jobs.*?)<\/script>/gis)
+      const jsonMatches = html.match(/<script[^>]*>(.*?jobs.*?)<\/script>/gi)
       if (jsonMatches) {
         console.log('📊 Found potential job data in scripts:', jsonMatches.length, 'matches')
       }
@@ -1251,7 +1261,7 @@ export default async function handler(
     // Clear existing jobs for this company before adding new ones
     console.log(`🗑️ Clearing existing ${companyName} jobs from database...`)
     
-    if (!supabase) {
+    if (!isSupabaseAvailable()) {
       return res.status(503).json({
         success: false,
         error: 'Database not configured'
@@ -1407,6 +1417,12 @@ export default async function handler(
       })
       .finally(() => {
         if (timeoutId) clearTimeout(timeoutId)
+        // Ensure scraping status is cleared even on timeout
+        setTimeout(() => {
+          fetch(`${req.headers.origin || 'http://localhost:3000'}/api/scraping-status?company=${companyName.toLowerCase()}`, {
+            method: 'DELETE'
+          }).catch(() => {})
+        }, timeout + 5000) // 5 seconds after timeout
       })
     
     // Return immediately to avoid browser timeout

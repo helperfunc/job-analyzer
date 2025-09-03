@@ -40,7 +40,9 @@ export default function ResourceThoughts({ resourceId, isPublic = true, onShowTo
   const fetchThoughts = async () => {
     setLoading(true)
     try {
-      const response = await fetch(`/api/resource-thoughts?resource_id=${resourceId}`)
+      const response = await fetch(`/api/resource-thoughts?resource_id=${resourceId}`, {
+        credentials: 'include'
+      })
       const data = await response.json()
       if (data.success) {
         setThoughts(data.data)
@@ -67,6 +69,7 @@ export default function ResourceThoughts({ resourceId, isPublic = true, onShowTo
       const response = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({
           resource_id: resourceId,
           thought_type: thoughtType,

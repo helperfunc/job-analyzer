@@ -41,7 +41,9 @@ export default function PaperInsights({ paperId, onShowToast }: PaperInsightsPro
   const fetchInsights = async () => {
     setLoading(true)
     try {
-      const response = await fetch(`/api/paper-insights?paper_id=${paperId}`)
+      const response = await fetch(`/api/paper-insights?paper_id=${paperId}`, {
+        credentials: 'include'
+      })
       const data = await response.json()
       if (data.success && Array.isArray(data.data)) {
         setInsights(data.data)
@@ -191,6 +193,7 @@ export default function PaperInsights({ paperId, onShowToast }: PaperInsightsPro
             const response = await fetch('/api/paper-insights', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
+              credentials: 'include',
               body: JSON.stringify(extendedData)
             })
 

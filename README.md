@@ -171,3 +171,14 @@ Welcome to submit Pull Requests or create Issues!
 ## License
 
 MIT
+
+---
+
+## About the Developer
+
+**Huixu** - Full-Stack Developer  
+📧 Contact: [huixucom@gmail.com](mailto:huixucom@gmail.com)  
+🌍 Status: Currently seeking opportunities in the United States  
+💼 Open to: Full-Stack, Backend, or Frontend roles
+
+© 2024 Job Analyzer. Built with ❤️ by Huixu

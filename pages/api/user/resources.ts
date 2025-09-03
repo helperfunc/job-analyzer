@@ -1,6 +1,6 @@
 import { NextApiRequest, NextApiResponse } from 'next'
 import { authenticateUser, optionalAuth, AuthenticatedRequest } from '../../../lib/auth'
-import { supabase } from '../../../lib/supabase'
+import { getSupabase, isSupabaseAvailable } from '../../../lib/supabase'
 
 interface UserResourceRequest {
   title: string
@@ -52,6 +52,14 @@ async function getResources(req: AuthenticatedRequest, res: NextApiResponse) {
       offset = '0',
       my_resources 
     } = req.query
+
+    if (!isSupabaseAvailable()) {
+      return res.status(503).json({
+        error: 'Database not configured'
+      })
+    }
+
+    const supabase = getSupabase()
 
     let query = supabase
       .from('user_resources')
@@ -109,8 +117,8 @@ async function getResources(req: AuthenticatedRequest, res: NextApiResponse) {
     }
 
     // 分页
-    const limitNum = parseInt(limit)
-    const offsetNum = parseInt(offset)
+    const limitNum = parseInt(Array.isArray(limit) ? limit[0] : limit)
+    const offsetNum = parseInt(Array.isArray(offset) ? offset[0] : offset)
     query = query
       .order('created_at', { ascending: false })
       .range(offsetNum, offsetNum + limitNum - 1)
@@ -146,6 +154,16 @@ async function createResource(
   userId: string
 ) {
   try {
+    // Check if database is available
+    if (!isSupabaseAvailable()) {
+      return res.status(500).json({
+        error: 'Database not available',
+        details: 'Database connection is not configured'
+      })
+    }
+
+    const supabase = getSupabase()
+    
     const resourceData: UserResourceRequest = req.body
 
     if (!resourceData.title || !resourceData.resource_type) {
@@ -232,6 +250,14 @@ async function updateResource(
       return res.status(400).json({ error: 'resource_id is required' })
     }
 
+    if (!isSupabaseAvailable()) {
+      return res.status(503).json({
+        error: 'Database not configured'
+      })
+    }
+
+    const supabase = getSupabase()
+
     // 验证用户拥有该资源
     const { data: existingResource, error: checkError } = await supabase
       .from('user_resources')
@@ -304,6 +330,14 @@ async function deleteResource(
     if (!resource_id || typeof resource_id !== 'string') {
       return res.status(400).json({ error: 'resource_id is required' })
     }
+
+    if (!isSupabaseAvailable()) {
+      return res.status(503).json({
+        error: 'Database not configured'
+      })
+    }
+
+    const supabase = getSupabase()
 
     const { error } = await supabase
       .from('user_resources')

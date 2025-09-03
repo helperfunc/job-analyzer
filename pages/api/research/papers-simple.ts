@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next'
-import { supabase } from '../../../lib/supabase'
+import { getSupabase, isSupabaseAvailable } from '../../../lib/supabase'
 
 // Mock data for when database is not available
 const mockPapers = [
@@ -44,9 +44,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const { company, limit = 100 } = req.query
       
       // Try to fetch from database first
-      if (supabase) {
+      if (isSupabaseAvailable()) {
         try {
           console.log(`Papers-simple: Fetching papers (limit=${limit}, company=${company})`)
+          const supabase = getSupabase()
           
           // Start with a basic query
           let query = supabase.from('research_papers').select('*')

@@ -8,19 +8,29 @@ interface ResourceFormProps {
   loading?: boolean
 }
 
+interface FormData {
+  title: string
+  description: string
+  resource_type: string
+  url: string
+  tags: string[]
+  visibility: 'public' | 'private' | 'friends'
+  content: string
+}
+
 const ResourceForm: React.FC<ResourceFormProps> = ({
   onSubmit,
   initialData = null,
   loading = false
 }) => {
   const { isAuthenticated } = useAuth()
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<FormData>({
     title: initialData?.title || '',
     description: initialData?.description || '',
     resource_type: initialData?.resource_type || 'tutorial',
     url: initialData?.url || '',
     tags: initialData?.tags || [],
-    visibility: initialData?.visibility || (isAuthenticated ? 'public' : 'public'), // Default to public for anonymous users
+    visibility: (initialData?.visibility as 'public' | 'private' | 'friends') || 'public', // Default to public
     content: initialData?.content || ''
   })
   
@@ -57,7 +67,7 @@ const ResourceForm: React.FC<ResourceFormProps> = ({
   const removeTag = (tagToRemove: string) => {
     setFormData({
       ...formData,
-      tags: formData.tags.filter(tag => tag !== tagToRemove)
+      tags: formData.tags.filter((tag: string) => tag !== tagToRemove)
     })
   }
 
@@ -168,7 +178,7 @@ const ResourceForm: React.FC<ResourceFormProps> = ({
         </div>
         {formData.tags.length > 0 && (
           <div className="flex flex-wrap gap-2">
-            {formData.tags.map((tag, index) => (
+            {formData.tags.map((tag: string, index: number) => (
               <span
                 key={index}
                 className="inline-flex items-center px-2 py-1 bg-blue-100 text-blue-800 text-sm rounded-full"
