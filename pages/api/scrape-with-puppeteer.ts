@@ -232,10 +232,9 @@ export default async function handler(
         try {
           // AWS Lambda specific configuration
           const browser = await puppeteer.launch({
-            args: isAWS ? [...chromium.args, '--no-sandbox', '--disable-setuid-sandbox'] : ['--no-sandbox', '--disable-setuid-sandbox'],
+            args: isAWS ? [...chromium.args, '--no-sandbox', '--disable-setuid-sandbox', '--disable-web-security'] : ['--no-sandbox', '--disable-setuid-sandbox', '--disable-web-security'],
             executablePath: isAWS ? await chromium.executablePath() : undefined,
-            headless: 'new',
-            ignoreHTTPSErrors: true,
+            headless: true,
             defaultViewport: {
               width: 1920,
               height: 1080
@@ -249,7 +248,7 @@ export default async function handler(
           await page.goto(mainUrl, { waitUntil: 'networkidle2', timeout: 30000 })
           
           // Wait for content to load
-          await page.waitForTimeout(3000)
+          await new Promise(resolve => setTimeout(resolve, 3000))
           
           html = await page.content()
           console.log(`📄 Received HTML via Puppeteer (${html.length} bytes)`)
@@ -283,8 +282,8 @@ export default async function handler(
         
         try {
           const browser = await puppeteer.launch({
-            headless: 'new',
-            args: ['--no-sandbox', '--disable-setuid-sandbox']
+            headless: true,
+            args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-web-security']
           })
           
           const page = await browser.newPage()
@@ -294,7 +293,7 @@ export default async function handler(
           await page.goto(mainUrl, { waitUntil: 'networkidle2', timeout: 30000 })
           
           // Wait for content to load
-          await page.waitForTimeout(3000)
+          await new Promise(resolve => setTimeout(resolve, 3000))
           
           html = await page.content()
           console.log(`📄 Received HTML via local Puppeteer (${html.length} bytes)`)
@@ -532,7 +531,7 @@ export default async function handler(
                 title,
                 url: jobUrl,
                 department,
-                skills: [...new Set(inferredSkills)]
+                skills: Array.from(new Set(inferredSkills))
               })
               processedUrls.add(jobUrl)
             }
@@ -1069,7 +1068,7 @@ export default async function handler(
           }
           
           // Remove duplicates
-          const uniqueSkills = [...new Set(skills)]
+          const uniqueSkills = Array.from(new Set(skills))
           
           // Clean up title formatting - add spaces where needed
           let cleanTitle = jobLink.title
@@ -1343,7 +1342,7 @@ export default async function handler(
       // Count skills from ACTUAL jobs data
       actualJobs.forEach((job: any) => {
         if (job.skills && job.skills.length > 0) {
-          job.skills.forEach(skill => {
+          job.skills.forEach((skill: string) => {
             skillsCount[skill] = (skillsCount[skill] || 0) + 1
           })
         }
