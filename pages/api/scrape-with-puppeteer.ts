@@ -232,11 +232,14 @@ export default async function handler(
         try {
           // AWS Lambda specific configuration
           const browser = await puppeteer.launch({
-            args: isAWS ? chromium.args : ['--no-sandbox', '--disable-setuid-sandbox'],
-            defaultViewport: chromium.defaultViewport,
+            args: isAWS ? [...chromium.args, '--no-sandbox', '--disable-setuid-sandbox'] : ['--no-sandbox', '--disable-setuid-sandbox'],
             executablePath: isAWS ? await chromium.executablePath() : undefined,
             headless: 'new',
             ignoreHTTPSErrors: true,
+            defaultViewport: {
+              width: 1920,
+              height: 1080
+            }
           })
           
           const page = await browser.newPage()
